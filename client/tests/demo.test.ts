@@ -1,7 +1,7 @@
 // 示例玩法（core/demo）的规则和关卡生成。换玩法时把这个文件换成自己玩法的测试。
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { covers, generate, kindOf } from '../assets/scripts/core/demo/level';
+import { covers, estimateSeconds, generate, kindOf, paceLimit } from '../assets/scripts/core/demo/level';
 import * as Rules from '../assets/scripts/core/demo/rules';
 import { GameState, LoseReason, Status } from '../assets/scripts/core/demo/rules';
 import { levels } from './helpers';
@@ -31,6 +31,22 @@ describe('关卡生成', () => {
     assert.equal(kindOf(CFG, CFG.bossEvery), 'boss');
     assert.equal(kindOf(CFG, CFG.hardEvery + 1), 'normal');
     assert.ok(generate(CFG, CFG.bossEvery).kinds > generate(CFG, CFG.bossEvery - 1).kinds);
+  });
+
+  it('单局时长不超过这种关的上限（docs/02 第 5 节）', () => {
+    for (let id = 1; id <= CFG.total; id++) {
+      const lv = generate(CFG, id);
+      assert.ok(estimateSeconds(CFG, lv) <= paceLimit(CFG, lv.kind), `第 ${id} 关估算 ${Math.round(estimateSeconds(CFG, lv))} 秒`);
+    }
+  });
+
+  it('难关、超难关之后的那一关放松：比前后的普通关都短', () => {
+    // 教学期的关本来就小，从第 21 关起看每一个难关前后
+    for (let h = 25; h + 1 <= CFG.total; h += CFG.hardEvery) {
+      const before = generate(CFG, h - 1);
+      const after = generate(CFG, h + 1);
+      assert.ok(after.tiles.length < before.tiles.length, `第 ${h + 1} 关不比第 ${h - 1} 关短`);
+    }
   });
 
   it('连输降档：少一种图案', () => {

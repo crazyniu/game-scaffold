@@ -60,8 +60,10 @@ export function generate(cfg: LevelsConfig, id: number, ease = 0, trayDelta = 0)
   const kind = kindOf(cfg, id);
   const seg = segmentFor(cfg, id);
   const plus = kind === 'boss' ? cfg.boss : kind === 'hard' ? cfg.hard : { kindsPlus: 0, setsPlus: 0 };
-  const kinds = Math.max(2, seg.kinds + plus.kindsPlus - ease * cfg.easeKinds);
-  const sets = Math.max(1, seg.sets + plus.setsPlus);
+  // 难关、超难关之后的那一关放松：少几种图案、组数压到最少（docs/02 第 5 节）
+  const rel = cfg.release && kind === 'normal' && id > 1 && kindOf(cfg, id - 1) !== 'normal' ? cfg.release : null;
+  const kinds = Math.max(2, seg.kinds + plus.kindsPlus - ease * cfg.easeKinds - (rel ? rel.kindsMinus : 0));
+  const sets = rel ? Math.min(rel.sets, seg.sets) : Math.max(1, seg.sets + plus.setsPlus);
   const total = kinds * sets * 3;
   const rng = new Rng((id * 2654435761) >>> 0);
   // 位置：每层是 cols × rows 的格子（单位：半块，块占 2×2），奇数层错开半格、少一行一列。
@@ -101,4 +103,14 @@ export function generate(cfg: LevelsConfig, id: number, ease = 0, trayDelta = 0)
   const spanX = Math.max(...tiles.map((t) => t.x)) + 2;
   const spanY = Math.max(...tiles.map((t) => t.y)) + 2;
   return { id, kind, kinds, tray: Math.max(3, cfg.tray + trayDelta), clock, spanX, spanY, tiles, ref };
+}
+
+/** 估算这一关打完要几秒（点击次数 × tapSec + 完成次数 × doneSec），关卡节奏的验收用（docs/02 第 5 节） */
+export function estimateSeconds(cfg: LevelsConfig, lv: DemoLevel): number {
+  return lv.tiles.length * cfg.pace.tapSec + (lv.tiles.length / 3) * cfg.pace.doneSec;
+}
+
+/** 这种关的时长上限（秒） */
+export function paceLimit(cfg: LevelsConfig, kind: LevelKind): number {
+  return cfg.pace[kind];
 }

@@ -40,12 +40,21 @@ describe('关卡生成', () => {
     }
   });
 
-  it('难关、超难关之后的那一关放松：比前后的普通关都短', () => {
-    // 教学期的关本来就小，从第 21 关起看每一个难关前后
-    for (let h = 25; h + 1 <= CFG.total; h += CFG.hardEvery) {
-      const before = generate(CFG, h - 1);
-      const after = generate(CFG, h + 1);
-      assert.ok(after.tiles.length < before.tiles.length, `第 ${h + 1} 关不比第 ${h - 1} 关短`);
+  it('难关、超难关之后的那一关放松：图案比再下一个普通关少', () => {
+    for (let h = 25; h + 2 <= CFG.total; h += CFG.hardEvery) {
+      const relax = generate(CFG, h + 1);
+      const next = generate(CFG, h + 2);
+      assert.ok(relax.kinds < next.kinds, `第 ${h + 1} 关不比第 ${h + 2} 关松`);
+    }
+  });
+
+  it('第 41 关起难度持平：普通关的图案数、块数都一样', () => {
+    const base = generate(CFG, 42);
+    for (let id = 42; id <= CFG.total; id++) {
+      const lv = generate(CFG, id);
+      if (lv.kind !== 'normal' || kindOf(CFG, id - 1) !== 'normal') continue;
+      assert.equal(lv.kinds, base.kinds, `第 ${id} 关`);
+      assert.equal(lv.tiles.length, base.tiles.length, `第 ${id} 关`);
     }
   });
 

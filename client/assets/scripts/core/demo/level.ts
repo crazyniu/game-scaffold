@@ -60,10 +60,10 @@ export function generate(cfg: LevelsConfig, id: number, ease = 0, trayDelta = 0)
   const kind = kindOf(cfg, id);
   const seg = segmentFor(cfg, id);
   const plus = kind === 'boss' ? cfg.boss : kind === 'hard' ? cfg.hard : { kindsPlus: 0, setsPlus: 0 };
-  // 难关、超难关之后的那一关放松：少几种图案、组数压到最少（docs/02 第 5 节）
+  // 难关、超难关之后的那一关放松：少几种图案，内容不减（docs/02 第 5 节）
   const rel = cfg.release && kind === 'normal' && id > 1 && kindOf(cfg, id - 1) !== 'normal' ? cfg.release : null;
   const kinds = Math.max(2, seg.kinds + plus.kindsPlus - ease * cfg.easeKinds - (rel ? rel.kindsMinus : 0));
-  const sets = rel ? Math.min(rel.sets, seg.sets) : Math.max(1, seg.sets + plus.setsPlus);
+  const sets = Math.max(1, seg.sets + plus.setsPlus);
   const total = kinds * sets * 3;
   const rng = new Rng((id * 2654435761) >>> 0);
   // 位置：每层是 cols × rows 的格子（单位：半块，块占 2×2），奇数层错开半格、少一行一列。

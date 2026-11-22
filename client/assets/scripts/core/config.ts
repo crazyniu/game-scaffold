@@ -242,11 +242,11 @@ export interface LevelsConfig {
   easeKinds: number;
   /** 限时：第 from 关起的难关、超难关限时，秒数 = 块数 × perTile，至少 min；不配 = 都不限时 */
   clock?: { from: number; perTile: number; min: number };
-  /** 难关、超难关之后的那一关放松（docs/02 第 5 节）：少几种图案、只放几组；不配 = 不放松 */
-  release?: { kindsMinus: number; sets: number };
+  /** 难关、超难关之后的那一关放松（docs/02 第 5 节）：少几种图案（内容不减）；不配 = 不放松 */
+  release?: { kindsMinus: number };
   /**
    * 单局时长（docs/02 第 5 节）：估算秒数 = 点击次数 × tapSec + 完成次数 × doneSec；
-   * normal / hard / boss 是三种关的上限（秒），level-verify 报超标的关、测试会拦
+   * normal / hard / boss 是三种关的上限（秒，三分钟以内都可以），level-verify 报超标的关、测试会拦
    */
   pace: { tapSec: number; doneSec: number; normal: number; hard: number; boss: number };
 }

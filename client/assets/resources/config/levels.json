@@ -1,5 +1,5 @@
 {
- "_comment": "示例玩法的关卡参数（core/demo/level.ts 按它现场生成关卡，保证可解）。排法照 docs/02 第 5 节：前 3 关教学、难度第 30 关左右到平台、之后按章小幅上台阶，单局短，难关之后放松。换玩法时换成自己的参数或关卡文件",
+ "_comment": "示例玩法的关卡参数（core/demo/level.ts 按它现场生成关卡，保证可解）。排法照 docs/02 第 5 节：前 3 关教学、第 21–40 关爬上去、第 41 关起持平，难关后放松。换玩法时换成自己的参数或关卡文件",
  "total": 120,
  "hardEvery": 5,
  "bossEvery": 20,
@@ -49,19 +49,19 @@
    ],
    "sets": [
     2,
-    2
+    3
    ],
    "layers": 3
   },
   {
-   "from": 31,
+   "from": 41,
    "kinds": [
     8,
-    9
+    8
    ],
    "sets": [
-    2,
-    2
+    3,
+    3
    ],
    "layers": 3
   }
@@ -81,14 +81,13 @@
   "min": 40
  },
  "release": {
-  "kindsMinus": 1,
-  "sets": 1
+  "kindsMinus": 1
  },
  "pace": {
   "tapSec": 1.1,
   "doneSec": 0.6,
-  "normal": 90,
-  "hard": 120,
-  "boss": 150
+  "normal": 180,
+  "hard": 180,
+  "boss": 180
  }
 }

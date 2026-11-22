@@ -6,6 +6,8 @@ cd "$(dirname "$0")"
 ORIG_ARGS=("$@")
 
 source tools/cocos/creator.sh
+# 记下有没有手动指定端口：没指定时，8080 被占就自动往后换一个（web_serve 里的 pick_web_port）
+WEB_PORT_SET="${WEB_PORT:+1}"
 WEB_PORT="${WEB_PORT:-8080}"
 # 试玩 Chrome 的调试端口（./run.sh cdp 连它）；同时试玩两款游戏时各用各的端口，如 WEB_PORT=8081 CDP_PORT=9334
 export CDP_PORT="${CDP_PORT:-9333}"
@@ -47,7 +49,7 @@ usage() {
 试玩、serve、editor 运行前会先拉当前分支的最新代码（git pull --ff-only；Mac 上先还原 client/ 下
 编辑器写的改动）。拉不下来只提示、用当前代码继续。
 
-环境变量：WEB_PORT（本地服务端口，默认 8080）、CDP_PORT（试玩 Chrome 的调试端口，默认 9333）、COCOS_CREATOR（Cocos Creator 可执行文件的路径）、NO_PULL=1（不自动拉代码）
+环境变量：WEB_PORT（本地服务端口，默认 8080，被占时自动往后换；手动指定的被占就报错）、CDP_PORT（试玩 Chrome 的调试端口，默认 9333）、COCOS_CREATOR（Cocos Creator 可执行文件的路径）、NO_PULL=1（不自动拉代码）
 EOF
 }
 
@@ -111,8 +113,41 @@ web_url() {
   echo "http://localhost:${WEB_PORT}/${q:+?${q#&}}"
 }
 
+# 端口有没有被占：0.0.0.0 和 127.0.0.1 都试着占一下，占不上就是有别的服务（常见是别的游戏的试玩服务）用着
+port_busy() {
+  python3 -c '
+import socket, sys
+port = int(sys.argv[1])
+for host in ("0.0.0.0", "127.0.0.1"):
+    s = socket.socket()
+    try:
+        s.bind((host, port))
+    except OSError:
+        sys.exit(0)
+    finally:
+        s.close()
+sys.exit(1)
+' "$1"
+}
+
+# 默认端口被占就往后找 20 个，用第一个空的；手动指定的端口被占直接报错，不偷偷换
+pick_web_port() {
+  port_busy "$WEB_PORT" || return 0
+  [ -z "$WEB_PORT_SET" ] || die "端口 ${WEB_PORT} 已被占用（可能是别的游戏的试玩服务还开着），换一个：WEB_PORT=<端口> ./run.sh …"
+  local p
+  for p in $(seq $((WEB_PORT + 1)) $((WEB_PORT + 20))); do
+    if ! port_busy "$p"; then
+      echo "→ 端口 ${WEB_PORT} 被占用（多半是别的游戏的试玩服务），改用 ${p}"
+      WEB_PORT="$p"
+      return 0
+    fi
+  done
+  die "端口 ${WEB_PORT}–$((WEB_PORT + 20)) 都被占用了，用 WEB_PORT=<端口> 指定一个空的"
+}
+
 web_serve() {
   local dir="$CLIENT/build/web-mobile" url
+  pick_web_port
   url="$(web_url "$@")"
   need_file "$dir/index.html" "请在 ./package.sh 选择 4（网页版）"
   # 内网模式（./run.sh lan）：绑到所有网卡，把本机的内网地址打出来，不开本机浏览器

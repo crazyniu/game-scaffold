@@ -65,7 +65,7 @@
 ./run.sh page shop             # 启动后直接打开某一页（shop、map、levels、tasks、daily、wheel、collect、lab…）
 ./run.sh real                  # 按真实存档进度（可与上面连用：./run.sh real level 3）
 ./run.sh serve                 # 不重新构建，打开上次的构建（后面同样可跟参数）
-./run.sh lan                   # 构建后服务开在内网，打印 http://<内网 IP>:8080/ 给手机和别的电脑测
+./run.sh lan                   # 构建后服务开在内网，打印 http://<内网 IP>:8080/ 给手机和别的电脑测（8080 被别的游戏占着就自动换下一个空端口，以打印的为准）
 ./run.sh editor                # 打开 Cocos Creator
 ./run.sh cdp logs | eval '<表达式>' | shot <文件> | burst <目录> <张数> <间隔毫秒> | watch   # 读控制台、求值、截图、连拍、盯卡死
 ./package.sh                   # 打包：1 微信小游戏 · 2 iOS（Xcode 工程 / 模拟器 / 真机 / IPA / 装到手机 / 上传）· 3 Android（APK / AAB / 工程）· 4 网页版（docs/10 第 4 节）

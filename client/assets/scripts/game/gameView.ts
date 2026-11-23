@@ -7,6 +7,7 @@ import * as Skills from '../core/meta/skills';
 import * as Meta from '../core/meta/meta';
 import * as Chapters from '../core/meta/chapters';
 import type { DemoLevel } from '../core/demo/level';
+import * as Bot from '../core/demo/bot';
 import * as Rules from '../core/demo/rules';
 import { GameState, Status } from '../core/demo/rules';
 import type { GameEvent } from '../core/demo/rules';
@@ -127,6 +128,8 @@ export class GamePage extends Page {
   private nudged = new Set<string>();
   private idle = 0;
   private autoT = 0;
+  /** 自动玩：每块被哪些块压着（这一关算一次） */
+  private autoUnder: number[][] | null = null;
   private fieldTop = 0;
   private fieldBottom = 0;
   private total = 0;
@@ -220,6 +223,7 @@ export class GamePage extends Page {
     this.extras = 0;
     this.undoSnap = null;
     this.demoStep = 0;
+    this.autoUnder = null;
     this.idle = 0;
     this.total = this.lv.tiles.length;
     this.layout(true);
@@ -880,13 +884,16 @@ export class GamePage extends Page {
       }
     }
     if (this.tutor && !this.tutorNode) Flow.checkTutorial(this);
-    // 玩法：演示（调试页）按参考解点；机器人代打（./run.sh auto）按提示点
+    // 玩法：演示（调试页）按参考解点；自动玩（devtools/autoPlay.ts、./run.sh auto）用量难度的机器人点（有输有赢，像真人），
+    // 同一关连输 2 次就改按参考解点（一定过，保证一直往下打）
     const demo = this.arg.demo === 'route';
     if ((demo || App.flags.autoplay) && this.s.status === Status.PLAYING) {
       this.autoT += dt;
       if (this.autoT > (demo ? App.config.ui.demo.ring + App.config.ui.demo.gap : 0.35)) {
         this.autoT = 0;
-        const i = demo ? this.lv.ref[this.demoStep++] : Rules.hint(this.s);
+        const route = demo || Flow.autoUseRoute(this.arg.level);
+        if (!route && !this.autoUnder) this.autoUnder = Bot.covered(this.lv);
+        const i = route ? this.lv.ref[this.demoStep++] : Bot.pickTap(this.s, this.rng, App.config.levels.pick?.bot ?? { slip: 0.1 }, this.autoUnder as number[][]);
         if (i !== undefined && i >= 0) this.doTap(i);
         else if (demo) Flow.demoStuck(this);
       }

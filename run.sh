@@ -10,6 +10,7 @@ source tools/cocos/creator.sh
 WEB_PORT_SET="${WEB_PORT:+1}"
 WEB_PORT="${WEB_PORT:-8080}"
 # 试玩 Chrome 的调试端口（./run.sh cdp 连它）；同时试玩两款游戏时各用各的端口，如 WEB_PORT=8081 CDP_PORT=9334
+CDP_PORT_SET="${CDP_PORT:+1}"
 export CDP_PORT="${CDP_PORT:-9333}"
 # 试玩 Chrome 的独立配置目录按游戏代号区分，两款游戏的存档（localStorage）互不干扰
 GAME_CODE="$(sed -nE 's/^ *"codeName": *"([^"]+)".*/\1/p' game.json | head -1)"
@@ -50,7 +51,7 @@ usage() {
 试玩、serve、editor 运行前会先拉当前分支的最新代码（git pull --ff-only；Mac 上先还原 client/ 下
 编辑器写的改动）。拉不下来只提示、用当前代码继续。
 
-环境变量：WEB_PORT（本地服务端口，默认 8080，被占时自动往后换；手动指定的被占就报错）、CDP_PORT（试玩 Chrome 的调试端口，默认 9333）、COCOS_CREATOR（Cocos Creator 可执行文件的路径）、NO_PULL=1（不自动拉代码）
+环境变量：WEB_PORT（本地服务端口，默认 8080，被占时自动往后换；手动指定的被占就报错）、CDP_PORT（试玩 Chrome 的调试端口，默认 9333，被别的游戏占着就自动往后换并记下来，./run.sh cdp 自动连它）、COCOS_CREATOR（Cocos Creator 可执行文件的路径）、NO_PULL=1（不自动拉代码）
 EOF
 }
 
@@ -146,6 +147,28 @@ pick_web_port() {
   die "端口 ${WEB_PORT}–$((WEB_PORT + 20)) 都被占用了，用 WEB_PORT=<端口> 指定一个空的"
 }
 
+# 试玩 Chrome 的调试端口：指定了 CDP_PORT 就用它；没指定时，这个游戏的试玩 Chrome 还开着就沿用它的端口
+# （同一个配置目录的 Chrome 只会交给原来那个进程，新给的端口不生效），否则从 9333 往后找空的（别的游戏的试玩 Chrome 可能占着 9333，#191）。
+# 用的端口记在「配置目录.port」，./run.sh cdp 没指定端口时读它
+chrome_profile() {
+  echo "${TMPDIR:-/tmp}/${GAME_CODE:-game}-chrome"
+}
+pick_cdp_port() {
+  [ -z "$CDP_PORT_SET" ] || return 0
+  local prof p
+  prof="$(chrome_profile)"
+  if [ -f "${prof}.port" ]; then
+    p="$(cat "${prof}.port")"
+    if [ -n "$p" ] && ps -Aww -o command 2>/dev/null | grep -F -- "--user-data-dir=${prof}" | grep -qF -- "--remote-debugging-port=${p}"; then
+      CDP_PORT="$p"
+      return 0
+    fi
+  fi
+  p=9333
+  while port_busy "$p" && [ "$p" -lt 9353 ]; do p=$((p + 1)); done
+  CDP_PORT="$p"
+}
+
 web_serve() {
   local dir="$CLIENT/build/web-mobile" url
   pick_web_port
@@ -166,7 +189,10 @@ web_serve() {
   # 后三个参数：窗口被别的窗口挡住时也照常跑（不然远程截图、连拍时画面是停的）
   local chrome=/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome
   if [ -x "$chrome" ]; then
-    (sleep 1; "$chrome" --user-data-dir="${TMPDIR:-/tmp}/${GAME_CODE:-game}-chrome" --no-first-run --remote-debugging-port="${CDP_PORT}" \
+    pick_cdp_port
+    echo "$CDP_PORT" > "$(chrome_profile).port"
+    echo "→ 调试端口 ${CDP_PORT}（./run.sh cdp 自动连它）"
+    (sleep 1; "$chrome" --user-data-dir="$(chrome_profile)" --no-first-run --remote-debugging-port="${CDP_PORT}" \
       --no-default-browser-check --app="$url" --window-size=450,832 \
       --disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-background-timer-throttling >/dev/null 2>&1) &
   elif command -v open >/dev/null; then
@@ -255,6 +281,9 @@ case "$cmd" in
     echo "✓ 已清掉 client/library、temp、build、local"
     ;;
   cdp)
+    # 没指定 CDP_PORT：连这个游戏的试玩 Chrome 记下的端口（pick_cdp_port）
+    [ -n "$CDP_PORT_SET" ] || CDP_PORT="$(cat "$(chrome_profile).port" 2>/dev/null || echo 9333)"
+    export CDP_PORT
     node tools/cocos/cdp.mjs "$@"
     ;;
   check)

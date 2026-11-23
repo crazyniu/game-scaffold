@@ -3,6 +3,7 @@
 import * as Lives from '../core/meta/lives';
 import type { LabHooks } from '../devtools/labPage';
 import { lab } from '../devtools/levelLab';
+import * as TestMode from '../devtools/testMode';
 import { App } from '../services/app';
 import { now } from '../services/clock';
 import { ui } from '../ui/shell';
@@ -64,6 +65,14 @@ export const labHooks: LabHooks = {
         App.save.data.level = id;
         App.save.write();
         ui.toast(`进度已设到第 ${id} 关`);
+      },
+    },
+    {
+      label: '退出测试模式',
+      run: () => {
+        TestMode.set(false);
+        ui.toast('测试模式已关，设置里的测试按钮藏起来了');
+        ui.go('home');
       },
     },
   ],

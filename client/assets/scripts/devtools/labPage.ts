@@ -4,8 +4,9 @@
 // - 单关：每关按「正常打法能过几成」存了好几档，挑一档顶替包里那一关，马上试玩
 // - 演示：电脑按关卡里存的路线打一遍（打得完 = 这一档一定过得去）、按正常打法现场打一局
 // 和具体游戏有关的（怎么开局、怎么演示、加金币之类的作弊按钮）都由 LabHooks 传进来
-import { EditBox, Label, Node } from 'cc';
-import { COLOR, at, box, button, lazyImg, slice, text } from '../ui/kit';
+import { Node } from 'cc';
+import { COLOR, at, box, button, lazyImg, onTap, slice, text } from '../ui/kit';
+import { keypad } from './autoPlay';
 import { Scroller } from '../ui/scroll';
 import { Screen } from '../ui/screen';
 import { Page, pageHead, ui } from '../ui/shell';
@@ -59,44 +60,18 @@ export class LabPage extends Page {
     this.render(true);
   }
 
-  /** 关卡号输入框：白底、只能输数字，输完（回车、点别处）跳到那一关；超出范围的夹到 1–总关数 */
+  /** 关卡号：白底框里是现在这一关，点一下弹数字键盘（autoPlay.keypad；系统输入框在网页上把数字摆到框外），输完跳到那一关 */
   private levelInput(parent: Node, x: number, y: number): Node {
-    const w = 130;
-    const h = 64;
-    const n = slice(parent, 'kit/capsule', w, h, 'levelInput');
+    const n = slice(parent, 'kit/capsule', 120, 64, 'levelInput');
     at(n, x, y);
-    // 输入框的两个文字节点要在加 EditBox 之前建好、按它认的名字命名，它会直接拿来用（不然它自己建一套系统字体的）
-    const shown = text(n, String(this.level), 36, { color: COLOR.navy });
-    shown.node.name = 'TEXT_LABEL';
-    const hint = text(n, '关卡号', 24, { color: COLOR.navy });
-    hint.node.name = 'PLACEHOLDER_LABEL';
-    const eb = n.addComponent(EditBox);
-    eb.textLabel = shown;
-    eb.placeholderLabel = hint as Label;
-    eb.inputMode = EditBox.InputMode.NUMERIC;
-    eb.maxLength = 3;
-    eb.string = String(this.level);
-    eb.placeholder = '关卡号';
-    // EditBox 会把文字铺满整个框、默认顶在上面（没居中），两行文字都改成上下左右居中
-    for (const l of [shown, hint as Label]) {
-      l.horizontalAlign = Label.HorizontalAlign.CENTER;
-      l.verticalAlign = Label.VerticalAlign.CENTER;
-    }
-    n.on(EditBox.EventType.EDITING_DID_ENDED, () => {
-      const v = parseInt(eb.string, 10);
-      if (!Number.isFinite(v)) {
-        eb.string = String(this.level);
-        return;
-      }
-      const id = Math.max(1, Math.min(this.hooks.levelCount(), v));
-      if (id === this.level) {
-        eb.string = String(id);
-        return;
-      }
-      this.level = id;
-      this.note = '';
-      this.render();
-    });
+    text(n, String(this.level), 36, { color: COLOR.navy });
+    onTap(n, () =>
+      keypad(this.hooks.levelCount(), (v) => {
+        this.level = v;
+        this.note = '';
+        this.render();
+      }),
+    );
     return n;
   }
 
@@ -146,9 +121,9 @@ export class LabPage extends Page {
     const custom = lab.picks.get(this.level);
     // 关卡号是一个输入框：点一下直接输入第几关，回车或点别处就跳过去（想直接测第 60 关）。
     // 没有各档版本的关也能跳，照样能看路线、试玩
-    at(text(row0, '第', 34).node, -305, 0);
-    at(this.levelInput(row0, -215, 0), -215, 0);
-    at(text(row0, '关', 34).node, -125, 0);
+    at(text(row0, '第', 34).node, -310, 0);
+    at(this.levelInput(row0, -225, 0), -225, 0);
+    at(text(row0, '关', 34).node, -140, 0);
     const step = (d: number) => {
       const i = ids.indexOf(this.level);
       if (ids.length > 0) this.level = ids[Math.max(0, Math.min(ids.length - 1, (i < 0 ? 0 : i) + d))];

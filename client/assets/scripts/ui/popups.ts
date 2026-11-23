@@ -22,6 +22,7 @@ import { Screen } from './screen';
 import { ui } from './shell';
 import { lab } from '../devtools/levelLab';
 import * as AutoPlay from '../devtools/autoPlay';
+import * as TestMode from '../devtools/testMode';
 
 // ---------------------------------------------------------------- 看广告
 
@@ -463,9 +464,29 @@ function languagePopup(): void {
 
 export function settingsPopup(mode: 'home' | 'pause', o: { onHome?: () => void; onRetry?: () => void; onClose?: () => void } = {}): void {
   const s = App.save.data;
-  const extra = (App.platform.hasCapability('ad_test') ? 112 : 0) + (App.platform.hasCapability('privacy_options') ? 112 : 0) + (App.platform.hasCapability('privacy_policy') ? 112 : 0) + (lab.enabled ? 112 : 0) + (AutoPlay.enabled() ? 112 : 0);
+  // 测试用的按钮（广告测试、难度调试、自动玩）只在测试模式里出（devtools/testMode.ts：设置标题 10 秒内连点 10 下，上架包也能开）
+  const test = mode === 'home' && TestMode.isOn();
+  const adTest = test && App.platform.hasCapability('ad_test');
+  const labOn = test && lab.enabled;
+  const autoOn = test && AutoPlay.enabled();
+  const extra = (adTest ? 112 : 0) + (App.platform.hasCapability('privacy_options') ? 112 : 0) + (App.platform.hasCapability('privacy_policy') ? 112 : 0) + (labOn ? 112 : 0) + (autoOn ? 112 : 0);
   const h = mode === 'pause' ? 528 : 512 + extra;
   const p = openPopup({ w: 620, h, title: tr(mode === 'pause' ? 'PAUSE_TITLE' : 'UI_SETTINGS'), onClose: o.onClose });
+  // 隐藏入口：标题「设置」10 秒内连点 10 下打开测试模式，重开设置就出测试按钮。点着没声音、不缩放，看不出能点
+  const titleBar = mode === 'home' ? p.body.getChildByName('title') : null;
+  if (titleBar) {
+    onTap(
+      titleBar,
+      () => {
+        if (!TestMode.tap(Date.now())) return;
+        if (!TestMode.isOn()) TestMode.set(true);
+        ui.toast('测试模式已打开');
+        p.close();
+        settingsPopup(mode, o);
+      },
+      { press: 0, sound: null },
+    );
+  }
   const rows: [string, string, keyof typeof s.settings][] = [
     ['kit/ic_music', 'H_MUSIC', 'music'],
     ['kit/ic_sound', 'H_SOUND', 'sound'],
@@ -544,19 +565,19 @@ export function settingsPopup(mode: 'home' | 'pause', o: { onHome?: () => void; 
       at(b.node, 0, y - 8);
       y -= 112;
     }
-    if (App.platform.hasCapability('ad_test')) {
+    if (adTest) {
       const b = button(p.body, { color: 'blue', w: 556, h: 88, label: tr('UI_AD_TEST'), fontSize: 32, onTap: () => (p.close(), ui.go('adtest')) });
       at(b.node, 0, y - 8);
       y -= 112;
     }
-    // 难度调试页（开发版才有，devtools/；调试用，字直接写）
-    if (lab.enabled) {
+    // 难度调试页（测试模式才有，devtools/；调试用，字直接写）
+    if (labOn) {
       const b = button(p.body, { color: 'blue', w: 556, h: 88, label: '难度调试', fontSize: 32, onTap: () => (p.close(), ui.go('lab')) });
       at(b.node, 0, y - 8);
       y -= 112;
     }
-    // 自动玩（开发版才有，devtools/autoPlay.ts）：选从第几关开始，机器人一直往下打
-    if (AutoPlay.enabled()) {
+    // 自动玩（测试模式才有，devtools/autoPlay.ts）：选从第几关开始（可以直接输），机器人一直往下打
+    if (autoOn) {
       const b = button(p.body, { color: 'blue', w: 556, h: 88, label: '自动玩', fontSize: 32, onTap: () => (p.close(), AutoPlay.popup()) });
       at(b.node, 0, y - 8);
     }

@@ -9,6 +9,7 @@ import { HomePage } from './pages/home';
 import { AdTestPage } from './pages/adtest';
 import { LabPage } from './devtools/labPage';
 import * as AutoPlay from './devtools/autoPlay';
+import * as TestMode from './devtools/testMode';
 import { lab } from './devtools/levelLab';
 import { applyTier, labHooks } from './game/labHooks';
 import { PlatformDebug } from './platform/platformDebug';
@@ -93,7 +94,9 @@ export class Boot extends Component {
           void loadPlatformConfig().then((c) => {
             view.setVersion(c.version);
             // 难度调试页：开发版才有（正式版自动不出，代码留着），game.json 的 levelLab 写 false 可以连开发版也关掉
-            if (c.levelLab !== false && App.platform.isDevBuild()) lab.init(App.platform, applyTier);
+            // 难度调试页、自动玩：所有包都在，入口藏在测试模式里（设置标题 10 秒内连点 10 下，devtools/testMode.ts）；game.json 的 levelLab 写 false 整个关掉
+            TestMode.init(App.platform);
+            if (c.levelLab !== false) lab.init(App.platform, applyTier);
           }).catch(() => undefined);
         },
       ],

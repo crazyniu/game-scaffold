@@ -23,7 +23,7 @@ function overMap(under: number[][]): number[][] {
   return over;
 }
 
-/** 这一步点哪块（没有能点的返回 -1）。局内自动玩（devtools/autoPlay.ts）也用它一步步点 */
+/** 这一步点哪块（没有能点的返回 -1）。机器人代打（devtools/autoPlay.ts）也用它一步步点 */
 export function pickTap(s: GameState, rng: Rng, o: BotOptions, under: number[][], over: number[][] = overMap(under)): number {
   const free: number[] = [];
   for (let i = 0; i < s.tiles.length; i++) if (s.alive[i] && under[i].every((j) => !s.alive[j])) free.push(i);
@@ -54,7 +54,7 @@ export function pickTap(s: GameState, rng: Rng, o: BotOptions, under: number[][]
   return pick;
 }
 
-/** 每块被哪些块压着（局内自动玩按关卡算一次） */
+/** 每块被哪些块压着（机器人代打按关卡算一次） */
 export function covered(lv: DemoLevel): number[][] {
   return coverMap(lv);
 }

@@ -1,6 +1,7 @@
 // 游戏接难度调试页（底座 devtools/，docs/10 第 9 节）要给的东西：整体三档改什么、怎么试玩和演示、作弊按钮。
 // 整体三档：暂存槽多几格、连击窗口几秒，数在 game_ui.json 的 labTiers（下标 = 档 + 1：困难、标准、简单）。换玩法时改这里
 import * as Lives from '../core/meta/lives';
+import * as AutoPlay from '../devtools/autoPlay';
 import type { LabHooks } from '../devtools/labPage';
 import { lab } from '../devtools/levelLab';
 import * as TestMode from '../devtools/testMode';
@@ -37,6 +38,7 @@ export const labHooks: LabHooks = {
     Flow.startLevel(id);
   },
   demo: (id) => Flow.startDemo(id),
+  auto: (id) => AutoPlay.start(id),
   tierNote: (t) => {
     const b = App.config.ui.labTiers[t + 1].tray;
     return `暂存槽 ${b > 0 ? `多 ${b} 格` : b < 0 ? `少 ${-b} 格` : '照设计'}，连击窗口 ${App.config.eco.combo.windowSeconds} 秒`;

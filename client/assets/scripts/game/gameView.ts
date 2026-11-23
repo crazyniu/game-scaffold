@@ -127,6 +127,8 @@ export class GamePage extends Page {
   private nudged = new Set<string>();
   private idle = 0;
   private autoT = 0;
+  /** 机器人代打下一步前还要停几秒（随机，humanPause） */
+  private autoWait = 1;
   private fieldTop = 0;
   private fieldBottom = 0;
   private total = 0;
@@ -220,6 +222,8 @@ export class GamePage extends Page {
     this.extras = 0;
     this.undoSnap = null;
     this.demoStep = 0;
+    this.autoT = 0;
+    this.autoWait = 1;
     this.idle = 0;
     this.total = this.lv.tiles.length;
     this.layout(true);
@@ -880,17 +884,26 @@ export class GamePage extends Page {
       }
     }
     if (this.tutor && !this.tutorNode) Flow.checkTutorial(this);
-    // 玩法：演示（调试页）和自动玩（devtools/autoPlay.ts、./run.sh auto）都按关卡的参考解点：每关一次就过，一直往下打
+    // 玩法：演示（调试页「看路线」）和机器人代打（devtools/autoPlay.ts、./run.sh auto）都按关卡的参考解点：每关一次就过，一直往下打。
+    // 代打像真人：每步停顿随机（game_ui.json 的 demo.pause / slow），画面上不出字（录屏、直播用）
     const demo = this.arg.demo === 'route';
     if ((demo || App.flags.autoplay) && this.s.status === Status.PLAYING) {
       this.autoT += dt;
-      if (this.autoT > (demo ? App.config.ui.demo.ring + App.config.ui.demo.gap : 0.35)) {
+      if (this.autoT > this.autoWait) {
         this.autoT = 0;
+        this.autoWait = demo ? App.config.ui.demo.ring + App.config.ui.demo.gap : this.humanPause();
         const i = this.lv.ref[this.demoStep++];
         if (i !== undefined && i >= 0) this.doTap(i);
         else if (demo) Flow.demoStuck(this);
       }
     }
+  }
+
+  /** 机器人代打每步停多久：多数时候 pause 秒，偶尔想久一点（slow 秒），像真人在点 */
+  private humanPause(): number {
+    const d = App.config.ui.demo;
+    const [a, b] = Math.random() < d.slowChance ? d.slow : d.pause;
+    return a + Math.random() * (b - a);
   }
 
   private syncClock(): void {

@@ -46,7 +46,7 @@ export function startLevel(level: number): void {
   ui.go('game', { level });
 }
 
-/** 难度调试页：电脑按参考解替玩家打一遍（能打完就证明这一关一定过得去）。不记成绩、不扣命，打完回调试页。调试用，字直接写 */
+/** 难度调试页：电脑按参考解替玩家打一遍（能打完就证明这一关一定过得去）。不记成绩、不扣命，打完回调试页；画面上不出字，结果写控制台 */
 export function startDemo(level: number): void {
   pendingCards.length = 0;
   ui.go('game', { level, demo: 'route' });
@@ -56,7 +56,8 @@ function demoDone(g: GamePage, msg: string): void {
   g.ended = true;
   pendingCards.length = 0;
   closeAllPopups();
-  ui.toast(msg);
+  // 画面上不出字（录屏、直播用），结果只写控制台
+  console.info(`[演示] 第 ${g.arg.level} 关：${msg}`);
   ui.go('lab');
 }
 
@@ -110,10 +111,7 @@ export function payDaily(g: GamePage): boolean {
 export function onLevelStart(g: GamePage): void {
   playMusic();
   const s = App.save.data;
-  if (g.arg.demo) {
-    ui.toast('电脑按参考解打，不用道具');
-    return;
-  }
+  if (g.arg.demo) return;
   if (App.flags.autoplay && !g.arg.daily) {
     g.showIntro();
     return;
@@ -292,7 +290,11 @@ export function pause(g: GamePage): void {
       g.paused = false;
       App.platform.hideBanner();
     },
-    onHome: () => leave(g, () => ui.go(g.arg.daily ? 'daily' : g.arg.demo ? 'lab' : 'home')),
+    onHome: () => {
+      // 机器人代打：暂停 → 回主页就停
+      App.flags.autoplay = false;
+      leave(g, () => ui.go(g.arg.daily ? 'daily' : g.arg.demo ? 'lab' : 'home'));
+    },
     onRetry: () => leave(g, () => restart(g)),
   });
 }

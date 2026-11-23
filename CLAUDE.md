@@ -61,7 +61,7 @@
 # Mac 上（需要 Cocos Creator 3.8.8）
 ./run.sh                       # 拉最新代码 → 构建网页版 → 起本地服务 → 用独立 Chrome 窗口打开（试玩模式：金币、生命、技能加满，所有关都能点开）
 ./run.sh level 12              # 同上，直接进第 12 关
-./run.sh auto [起] [止]        # 机器人代打：过关自动下一关、输了重打（开发版设置里也有「自动玩」，能选从第几关开始，docs/10 9.1）
+./run.sh auto [起] [止]        # 机器人代打：过关自动下一关、输了重打（测试模式的调试页里也有「机器人代打（从这关起）」，docs/10 9.1）
 ./run.sh page shop             # 启动后直接打开某一页（shop、map、levels、tasks、daily、wheel、collect、lab…）
 ./run.sh real                  # 按真实存档进度（可与上面连用：./run.sh real level 3）
 ./run.sh serve                 # 不重新构建，打开上次的构建（后面同样可跟参数）

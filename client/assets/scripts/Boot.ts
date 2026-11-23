@@ -8,7 +8,6 @@ import { ResultPage } from './game/result';
 import { HomePage } from './pages/home';
 import { AdTestPage } from './pages/adtest';
 import { LabPage } from './devtools/labPage';
-import * as AutoPlay from './devtools/autoPlay';
 import * as TestMode from './devtools/testMode';
 import { lab } from './devtools/levelLab';
 import { applyTier, labHooks } from './game/labHooks';
@@ -94,7 +93,7 @@ export class Boot extends Component {
           void loadPlatformConfig().then((c) => {
             view.setVersion(c.version);
             // 难度调试页：开发版才有（正式版自动不出，代码留着），game.json 的 levelLab 写 false 可以连开发版也关掉
-            // 难度调试页、自动玩：所有包都在，入口藏在测试模式里（设置标题 10 秒内连点 10 下，devtools/testMode.ts）；game.json 的 levelLab 写 false 整个关掉
+            // 难度调试页、机器人代打：所有包都在，入口藏在测试模式里（设置标题 10 秒内连点 10 下，devtools/testMode.ts）；game.json 的 levelLab 写 false 整个关掉
             TestMode.init(App.platform);
             if (c.levelLab !== false) lab.init(App.platform, applyTier);
           }).catch(() => undefined);
@@ -196,8 +195,6 @@ export class Boot extends Component {
     if (DEBUG) (globalThis as unknown as Record<string, unknown>).gsDebug = { ui, App, Popups, Flow, signInPopup, profilePopup, closeAllPopups, fitLog, setLanguage: switchLanguage };
     // 调试：直接进关（./run.sh level N、./run.sh auto）；没给关卡号就进当前关
     if (App.flags.play) ui.go('game', { level: App.flags.level > 0 ? App.flags.level : App.save.data.level });
-    // 启动参数 ?autoplay=1：和设置里的「自动玩」一样挂上「停止自动玩」
-    if (App.flags.autoplay) AutoPlay.showStop();
     else if (App.flags.page) ui.go(App.flags.page);
     else ui.go('home');
     // 首页用不到的大图和卡面：首页出来以后在后台接着读，先读局内的，再读结算、开箱用的。

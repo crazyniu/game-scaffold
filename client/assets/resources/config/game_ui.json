@@ -28,7 +28,10 @@
  ],
  "demo": {
   "ring": 0.3,
-  "gap": 0.25
+  "gap": 0.25,
+  "pause": [0.6, 1.4],
+  "slowChance": 0.12,
+  "slow": [1.6, 2.8]
  },
  "clock": {
   "warn": 15

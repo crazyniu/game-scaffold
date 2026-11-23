@@ -1,24 +1,14 @@
-// 自动玩（测试模式才有：设置里的「自动玩」，devtools/testMode.ts；调试用，字直接写）。选从第几关开始，机器人一直往下打：
+// 机器人代打（测试模式才有：设置里的「难度调试 · 机器人代打」进调试页，点「机器人代打（从这关起）」；devtools/testMode.ts，调试用，字直接写）。
+// 机器人从这一关起一直往下打，像真人一样点（每步停顿随机，gameView.ts），画面上不出任何字、不挂按钮（录屏、直播用）：
 // 过关后等结算页播完，自己点「下一关」（和真人点一样走 Flow.afterResult，插屏照 ads.json 的频控出，模拟插屏 1.5 秒后自己关）；
-// 输了不弹复活和失败窗，记一次失败后重打这一关（连输照样降档）；打到最后一关回主页。屏幕左边一直挂着「停止自动玩」。
+// 输了不弹复活和失败窗，记一次失败后重打这一关（连输照样降档）；打到最后一关回主页。停：暂停 → 回主页。
 // 启动参数 ?autoplay=1&level=N（./run.sh auto N）走的是同一套。
-import { Node } from 'cc';
 import { App } from '../services/app';
-import * as fx from '../ui/fx';
-import { COLOR, at, button, onTap, slice, text } from '../ui/kit';
+import { COLOR, at, button, text } from '../ui/kit';
 import { closeAllPopups, openPopup } from '../ui/popup';
-import { Screen } from '../ui/screen';
 import { ui } from '../ui/shell';
-import * as TestMode from './testMode';
 
-let stopNode: Node | null = null;
-
-/** 设置里出不出「自动玩」：测试模式打开了才有（设置标题 10 秒内连点 10 下，devtools/testMode.ts；上架包也能开） */
-export function enabled(): boolean {
-  return TestMode.isOn();
-}
-
-/** 从第 level 关开始自动玩 */
+/** 从第 level 关开始代打（调试页「机器人代打（从这关起）」） */
 export function start(level: number): void {
   const s = App.save.data;
   const id = Math.max(1, Math.min(App.config.levelCount, Math.trunc(level)));
@@ -30,69 +20,7 @@ export function start(level: number): void {
   App.flags.autoplay = true;
   App.flags.autoTo = 0;
   closeAllPopups();
-  showStop();
   ui.go('game', { level: id });
-}
-
-export function stop(): void {
-  App.flags.autoplay = false;
-  stopNode?.destroy();
-  stopNode = null;
-  ui.toast('已停止自动玩，这一关接着自己玩');
-}
-
-/** 屏幕左边的「停止自动玩」：挂在最上层，换页也在；自动玩结束（打到最后一关）自己收起 */
-export function showStop(): void {
-  stopNode?.destroy();
-  const b = button(ui.toasts, { color: 'red', w: 220, h: 72, label: '停止自动玩', fontSize: 28, onTap: () => stop() });
-  at(b.node, -Screen.W / 2 + 130, Screen.top - 300);
-  stopNode = b.node;
-  const watch = (): void => {
-    if (!stopNode || !stopNode.isValid) return;
-    if (!App.flags.autoplay) {
-      stopNode.destroy();
-      stopNode = null;
-      return;
-    }
-    fx.delay(stopNode, 0.5, watch);
-  };
-  fx.delay(stopNode, 0.5, watch);
-}
-
-/** 选从第几关开始的小窗：中间的关卡号点一下弹数字键盘直接输，两边 ±1、±10 微调 */
-export function popup(): void {
-  let level = Math.max(1, Math.min(App.config.levelCount, App.save.data.level));
-  const p = openPopup({ w: 620, h: 470, title: '自动玩' });
-  const box = slice(p.body, 'kit/capsule', 300, 84, 'level');
-  at(box, 0, 150);
-  const label = text(box, '', 40, { color: COLOR.navy });
-  const show = () => (label.string = `从第 ${level} 关开始`);
-  show();
-  onTap(box, () =>
-    keypad(App.config.levelCount, (v) => {
-      level = v;
-      show();
-    }),
-  );
-  const steps = [-10, -1, 1, 10];
-  steps.forEach((d, i) => {
-    const b = button(p.body, {
-      color: 'blue',
-      w: 120,
-      h: 88,
-      label: d > 0 ? `+${d}` : String(d),
-      fontSize: 34,
-      onTap: () => {
-        level = Math.max(1, Math.min(App.config.levelCount, level + d));
-        show();
-      },
-    });
-    at(b.node, (i - 1.5) * 136, 40);
-  });
-  const note = text(p.body, '点关卡号可以直接输。过关自动点下一关，输了重打\n广告照真实规则出，模拟插屏自己关', 26);
-  at(note.node, 0, -70);
-  const go = button(p.body, { color: 'green', w: 420, h: 100, label: '开始', fontSize: 40, onTap: () => start(level) });
-  at(go.node, 0, -170);
 }
 
 /**

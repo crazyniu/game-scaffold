@@ -23,7 +23,7 @@ export function mockAdView(layer: () => Node): MockAdView {
           root.destroy();
           resolve(r);
         };
-        // 自动玩（devtools/autoPlay.ts）：没人点，1.5 秒后自己关（插屏算播完，激励视频算看完）
+        // 机器人代打（devtools/autoPlay.ts）：没人点，1.5 秒后自己关（插屏算播完，激励视频算看完）
         if (App.flags.autoplay) fx.delay(root, 1.5, () => root.isValid && done('done'));
         if (kind === 'interstitial') {
           const close = button(root, { color: 'gray', w: 260, h: 90, label: '关闭', onTap: () => done('done') });

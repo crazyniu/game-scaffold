@@ -2,7 +2,8 @@
 // 调试用：版面朴素、字直接写、不进翻译表。页面内容超出屏幕就上下滚动。
 // - 整体三档：所有关立刻生效，改什么由游戏的 onTier 决定
 // - 单关：每关按「正常打法能过几成」存了好几档，挑一档顶替包里那一关，马上试玩
-// - 演示：电脑按关卡里存的路线打一遍（打得完 = 这一档一定过得去）、按正常打法现场打一局
+// - 演示：电脑按关卡里存的路线打一遍（打得完 = 这一档一定过得去）
+// - 机器人代打：从这关起一关接一关打，画面上不出任何字（录屏、直播用）
 // 和具体游戏有关的（怎么开局、怎么演示、加金币之类的作弊按钮）都由 LabHooks 传进来
 import { Node } from 'cc';
 import { COLOR, at, box, button, lazyImg, onTap, slice, text } from '../ui/kit';
@@ -19,8 +20,10 @@ export interface LabHooks {
   levelCount(): number;
   /** 试玩这一关 */
   play(id: number): void;
-  /** 演示：route 按关卡里存的路线打、casual 按正常打法打一局；不给就不出这两个按钮 */
-  demo?(id: number, kind: 'route' | 'casual'): void;
+  /** 演示：电脑按关卡里存的路线（参考解）打一遍，打完回调试页；不给就不出「看路线」 */
+  demo?(id: number): void;
+  /** 机器人从这一关起一关接一关连打（过关自动下一关、输了重打）；不给就不出这个按钮 */
+  auto?(id: number): void;
   /** 整体档的说明（切换后显示在下面），如「暂存槽少 1 格，连击窗口 1.5 秒」 */
   tierNote?(tier: number): string;
   /** 作弊按钮（金币、生命、进度……），三个一排；id 是页面上正在看的关 */
@@ -164,30 +167,37 @@ export class LabPage extends Page {
     at(note.node, 0, y - 6);
     y -= 84;
 
-    // 演示：电脑打在用的这一档（换了档就打换的，没换就打包里的）
+    // 第一排：看路线（电脑按参考解打在用的这一档，一定能过）、试玩这一关
     const demo = this.hooks.demo;
-    if (demo) {
-      at(button(c, { color: 'yellow', w: 330, h: 84, label: '看路线（一定能过）', fontSize: 28, onTap: () => demo(this.level, 'route') }).node, -175, y);
-      at(button(c, { color: 'yellow', w: 330, h: 84, label: '看正常打法打一局', fontSize: 28, onTap: () => demo(this.level, 'casual') }).node, 175, y);
-      y -= 104;
-    }
-
-    at(button(c, { color: 'green', w: 330, h: 88, label: '试玩这一关', fontSize: 34, onTap: () => this.hooks.play(this.level) }).node, -175, y);
-    const back = button(c, {
-      color: 'blue',
-      w: 330,
-      h: 88,
-      label: '恢复包里的',
-      fontSize: 30,
-      onTap: () => {
-        lab.unpick(this.level);
-        this.note = `第 ${this.level} 关换回包里的版本`;
-        this.render();
-      },
-    });
-    at(back.node, 175, y);
-    back.setEnabled(!!custom);
+    if (demo) at(button(c, { color: 'yellow', w: 330, h: 88, label: '看路线（一定能过）', fontSize: 28, onTap: () => demo(this.level) }).node, -175, y);
+    at(button(c, { color: 'green', w: 330, h: 88, label: '试玩这一关', fontSize: 34, onTap: () => this.hooks.play(this.level) }).node, demo ? 175 : 0, y);
     y -= 108;
+    // 第二排：有各档版本（levels_lab）时是「恢复包里的」
+    if (info) {
+      const back = button(c, {
+        color: 'blue',
+        w: 690,
+        h: 88,
+        label: '恢复包里的',
+        fontSize: 30,
+        onTap: () => {
+          lab.unpick(this.level);
+          this.note = `第 ${this.level} 关换回包里的版本`;
+          this.render();
+        },
+      });
+      at(back.node, 0, y);
+      back.setEnabled(!!custom);
+      y -= 108;
+    }
+    // 机器人代打：从这关起一关接一关打（过关自动下一关、输了重打），画面上不出字，录屏、直播用
+    const auto = this.hooks.auto;
+    if (auto) {
+      at(button(c, { color: 'yellow', w: 690, h: 88, label: '机器人代打（从这关起）', fontSize: 32, onTap: () => auto(this.level) }).node, 0, y);
+      y -= 70;
+      at(text(c, '过关自动进下一关、输了重打；暂停后回主页就停', 24, { width: 680 }).node, 0, y);
+      y -= 60;
+    }
 
     const extras = this.hooks.extras ?? [];
     extras.forEach((e, i) => {

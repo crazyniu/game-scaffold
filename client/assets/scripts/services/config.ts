@@ -26,18 +26,22 @@ export class Config {
   eco!: EconomyConfig;
   ads!: AdsConfig;
   levels!: LevelsConfig;
+  /** 每关用第几个候选（config/level_seeds.json，./run.sh level-pick 挑的；docs/02 第 5.8 节） */
+  seeds: Record<string, number> = {};
   ui!: GameUiConfig;
   cards: CardDef[] = [];
   cardById = new Map<string, CardDef>();
 
   async load(): Promise<void> {
-    const [eco, ads, levels, cards, ui] = await Promise.all([
+    const [eco, ads, levels, cards, ui, seeds] = await Promise.all([
       loadJson<EconomyConfig>('config/economy'),
       loadJson<AdsConfig>('config/ads'),
       loadJson<LevelsConfig>('config/levels'),
       loadJson<{ cards: CardDef[] }>('config/cards'),
       loadJson<GameUiConfig>('config/game_ui'),
+      loadJson<{ seeds: Record<string, number> }>('config/level_seeds'),
     ]);
+    this.seeds = seeds.seeds;
     this.ui = ui;
     this.eco = eco;
     this.ads = ads;
@@ -63,6 +67,6 @@ export class Config {
   async loadLevel(fileId: number, ease: number, trayDelta = 0): Promise<DemoLevel> {
     const custom = lab.override(fileId);
     const e = custom && typeof custom.ease === 'number' ? custom.ease : ease;
-    return generate(this.levels, fileId, e, trayDelta);
+    return generate(this.levels, fileId, e, trayDelta, this.seeds[String(fileId)] ?? 0);
   }
 }

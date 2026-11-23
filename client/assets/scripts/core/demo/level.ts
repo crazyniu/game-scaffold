@@ -31,11 +31,33 @@ export interface DemoLevel {
   ref: number[];
 }
 
-/** 第 id 关是哪一种（id 传 Meta.levelFile 换算后的编号） */
+/**
+ * 第 id 关是哪一种（id 传 Meta.levelFile 换算后的编号）。难度分 3 档、按「放松关、普通关、普通关、难关」轮换（docs/02 第 5 节）：
+ * 第 hardFrom 关起每 hardEvery 关一个难关，每 bossEvery 关的难关是超难关；难关后面那一关是放松关（isRelease）
+ */
 export function kindOf(cfg: LevelsConfig, id: number): LevelKind {
+  if (id < (cfg.hardFrom ?? 0)) return 'normal';
   if (cfg.bossEvery > 0 && id % cfg.bossEvery === 0) return 'boss';
   if (cfg.hardEvery > 0 && id % cfg.hardEvery === 0) return 'hard';
   return 'normal';
+}
+
+/** 难关、超难关之后的那一关（配了 release 才有） */
+export function isRelease(cfg: LevelsConfig, id: number): boolean {
+  return cfg.release !== undefined && id > 1 && kindOf(cfg, id) === 'normal' && kindOf(cfg, id - 1) !== 'normal';
+}
+
+/**
+ * 这一关机器人（core/demo/bot.ts）不用道具的过关率目标（0–1，docs/02 第 5.8 节）；教学关返回 null（不挑，用第 0 个种子）。
+ * 头几关缓一档（early），之后按关卡类型取 normal / hard / boss，放松关加 releasePlus
+ */
+export function targetFor(cfg: LevelsConfig, id: number): number | null {
+  const t = cfg.targets;
+  if (!t || id <= t.tutorialUntil) return null;
+  const kind = kindOf(cfg, id);
+  if (t.early && id <= t.early.until) return kind === 'normal' ? t.early.normal : t.early.hard;
+  const base = kind === 'boss' ? t.boss : kind === 'hard' ? t.hard : t.normal;
+  return Math.min(0.95, base + (isRelease(cfg, id) ? t.releasePlus : 0));
 }
 
 function segmentFor(cfg: LevelsConfig, id: number): { kinds: number; sets: number; layers: number } {
@@ -54,18 +76,19 @@ export function covers(a: Tile, b: Tile): boolean {
 }
 
 /**
- * 生成第 id 关。ease：连输后降的档（每档少 cfg.easeKinds 种图案）；trayDelta：调试页整体档给暂存槽加减几格
+ * 生成第 id 关。ease：连输后降的档（每档少 cfg.easeKinds 种图案）；trayDelta：调试页整体档给暂存槽加减几格；
+ * variant：第几个候选（config/level_seeds.json 里挑好的，./run.sh level-pick 写；不给 = 第 0 个）
  */
-export function generate(cfg: LevelsConfig, id: number, ease = 0, trayDelta = 0): DemoLevel {
+export function generate(cfg: LevelsConfig, id: number, ease = 0, trayDelta = 0, variant = 0): DemoLevel {
   const kind = kindOf(cfg, id);
   const seg = segmentFor(cfg, id);
   const plus = kind === 'boss' ? cfg.boss : kind === 'hard' ? cfg.hard : { kindsPlus: 0, setsPlus: 0 };
   // 难关、超难关之后的那一关放松：少几种图案，内容不减（docs/02 第 5 节）
-  const rel = cfg.release && kind === 'normal' && id > 1 && kindOf(cfg, id - 1) !== 'normal' ? cfg.release : null;
+  const rel = isRelease(cfg, id) ? cfg.release : null;
   const kinds = Math.max(2, seg.kinds + plus.kindsPlus - ease * cfg.easeKinds - (rel ? rel.kindsMinus : 0));
   const sets = Math.max(1, seg.sets + plus.setsPlus);
   const total = kinds * sets * 3;
-  const rng = new Rng((id * 2654435761) >>> 0);
+  const rng = new Rng((id * 2654435761 + variant * 40503) >>> 0);
   // 位置：每层是 cols × rows 的格子（单位：半块，块占 2×2），奇数层错开半格、少一行一列。
   // 行数取「所有层加起来放得下」的最小值，块从下往上一层层均分
   const layers = Math.max(1, seg.layers);

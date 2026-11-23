@@ -41,6 +41,7 @@ usage() {
   check                 类型检查 + 单元测试 + .meta 与图片压缩检查（与 CI 相同）
   test                  只跑单元测试
   level-verify [起] [止] 校验关卡：每一关都生成得出来、参考解能过（示例玩法；换玩法时改 client/tools/level/verify.ts）
+  level-pick [起] [止]   挑候选：每关生成十几个候选、用机器人量，挑最接近目标的写进 config/level_seeds.json（--probe 只量现状，--dry 不写；docs/02 第 5.8 节）
   eco-sim [--from=130]  金币的账：按活跃玩家每天过几关跑若干天，看一天挣多少、要花多少、要看几次广告（参数见 tools/economy/sim.ts）
   meta                  给 client/assets 里缺 .meta 的资源补 .meta（结果要提交）
   art-compress          包体压缩：PNG 调色板量化、背景音乐转 mp3（改了图后跑）
@@ -289,6 +290,10 @@ case "$cmd" in
   level-verify)
     need_node_modules
     (cd client && npx tsx tools/level/verify.ts "$@")
+    ;;
+  level-pick)
+    need_node_modules
+    (cd client && npx tsx tools/level/pick.ts "$@")
     ;;
   eco-sim)
     need_node_modules

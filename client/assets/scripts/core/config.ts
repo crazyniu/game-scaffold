@@ -229,9 +229,10 @@ export interface LevelSegment {
 export interface LevelsConfig {
   /** 关卡总数：超过后在后一半里循环（Meta.levelFile） */
   total: number;
-  /** 每几关一个难关、每几关一个超难关（0 = 没有） */
+  /** 每几关一个难关、每几关一个超难关（0 = 没有）；第一个难关在第 hardFrom 关（不给 = 第 hardEvery 关）。1、2、2、3 轮换就是 hardEvery 4 */
   hardEvery: number;
   bossEvery: number;
+  hardFrom?: number;
   /** 暂存槽几格 */
   tray: number;
   segments: LevelSegment[];
@@ -249,6 +250,20 @@ export interface LevelsConfig {
    * normal / hard / boss 是三种关的上限（秒，三分钟以内都可以），level-verify 报超标的关、测试会拦
    */
   pace: { tapSec: number; doneSec: number; normal: number; hard: number; boss: number };
+  /**
+   * 机器人（core/demo/bot.ts）不用道具的过关率目标（0–1，docs/02 第 5.8 节）：第 tutorialUntil 关以前是教学关不挑；
+   * 头几关（到 early.until）缓一档；之后普通关、难关、超难关各一个数持平；放松关多 releasePlus
+   */
+  targets?: {
+    tutorialUntil: number;
+    early?: { until: number; normal: number; hard: number };
+    normal: number;
+    hard: number;
+    boss: number;
+    releasePlus: number;
+  };
+  /** 挑候选（./run.sh level-pick）：每关几个候选、初量几局、复量几局；bot.slip 是机器人手滑的概率 */
+  pick?: { candidates: number; games: number; checkGames: number; bot: { slip: number } };
 }
 
 /** 界面数值（动画时长、提示、教学），assets/resources/config/game_ui.json */

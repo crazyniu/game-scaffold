@@ -74,6 +74,7 @@
 ./run.sh check                 # 类型检查 + .meta / 图片压缩 / 存档前缀检查 + 单测（和 CI 相同）
 ./run.sh test                  # 只跑单测
 ./run.sh level-verify          # 全部关卡按参考解能过
+./run.sh level-pick [起] [止]   # 挑候选：每关生成十几个、机器人量、挑最接近目标的（docs/02 5.8；--probe 只量现状）
 ./run.sh eco-sim               # 金币的账：一天挣多少、花多少、看几次广告（--no-ads、--win=0.5 …）
 ./run.sh native-apply          # 按 game.json 改写各平台构建配置和原生工程（打包时自动跑）
 ./run.sh native-icons          # 从 art/approved/logo/logo_1024.png 生成各平台应用图标、iOS 启动屏

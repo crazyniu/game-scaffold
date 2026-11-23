@@ -1,7 +1,8 @@
 {
- "_comment": "示例玩法的关卡参数（core/demo/level.ts 按它现场生成关卡，保证可解）。排法照 docs/02 第 5 节：前 3 关教学、第 21–40 关爬上去、第 41 关起持平，难关后放松。换玩法时换成自己的参数或关卡文件",
+ "_comment": "示例玩法的关卡参数（core/demo/level.ts 按它现场生成关卡，保证可解）。排法照 docs/02 第 5 节：前 3 关教学，难度分 3 档按「放松关、普通关、普通关、难关」轮换（第 8 关起每 4 关一个难关），第 10 关起开始难，第 41 关起持平。每关用哪个候选由 ./run.sh level-pick 按 targets 挑（第 5.8 节，写进 level_seeds.json）。换玩法时换成自己的参数或关卡文件",
  "total": 120,
- "hardEvery": 5,
+ "hardEvery": 4,
+ "hardFrom": 8,
  "bossEvery": 20,
  "tray": 7,
  "segments": [
@@ -20,58 +21,58 @@
   {
    "from": 4,
    "kinds": [
-    4,
-    6
-   ],
-   "sets": [
-    1,
-    2
-   ],
-   "layers": 2
-  },
-  {
-   "from": 11,
-   "kinds": [
-    6,
-    7
+    9,
+    11
    ],
    "sets": [
     2,
     2
    ],
-   "layers": 2
+   "layers": 4
+  },
+  {
+   "from": 10,
+   "kinds": [
+    12,
+    13
+   ],
+   "sets": [
+    2,
+    2
+   ],
+   "layers": 5
   },
   {
    "from": 21,
    "kinds": [
-    7,
-    8
+    12,
+    14
    ],
    "sets": [
     2,
-    3
+    2
    ],
-   "layers": 3
+   "layers": 5
   },
   {
    "from": 41,
    "kinds": [
-    8,
-    8
+    14,
+    14
    ],
    "sets": [
-    3,
-    3
+    2,
+    2
    ],
-   "layers": 3
+   "layers": 5
   }
  ],
  "hard": {
-  "kindsPlus": 1,
-  "setsPlus": 0
+  "kindsPlus": 0,
+  "setsPlus": 1
  },
  "boss": {
-  "kindsPlus": 2,
+  "kindsPlus": 1,
   "setsPlus": 1
  },
  "easeKinds": 1,
@@ -89,5 +90,25 @@
   "normal": 180,
   "hard": 180,
   "boss": 180
+ },
+ "targets": {
+  "tutorialUntil": 3,
+  "early": {
+   "until": 9,
+   "normal": 0.6,
+   "hard": 0.45
+  },
+  "normal": 0.4,
+  "hard": 0.25,
+  "boss": 0.15,
+  "releasePlus": 0.1
+ },
+ "pick": {
+  "candidates": 16,
+  "games": 40,
+  "checkGames": 120,
+  "bot": {
+   "slip": 0.1
+  }
  }
 }

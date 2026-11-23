@@ -57,6 +57,11 @@ export function takeFreeCoin(save: SaveData, eco: EconomyConfig, day: number): b
   return true;
 }
 
+/** 这一关的结算页、暂停弹窗底部放不放 Banner（前几关不出广告） */
+export function shouldShowBanner(ads: AdsConfig, levelId: number): boolean {
+  return levelId >= (ads.banner?.minLevel ?? 0);
+}
+
 /** 过关后该不该弹插屏。now 是单调递增的秒数 */
 export function shouldShowInterstitial(save: SaveData, ads: AdsConfig, levelId: number, now: number): boolean {
   const rule = ads.interstitial;

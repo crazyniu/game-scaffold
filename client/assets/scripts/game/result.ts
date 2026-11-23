@@ -2,6 +2,7 @@
 // 「下一关」呼吸；点任意处跳到最终状态；全程 ≤ 3 秒（docs/09）。
 // 三颗星按成绩亮（docs/01）：一个道具都没用三颗；没拿到的星位留着、是灰的。第一次三星在奖励条里多一格。
 import { Node, Sprite, Tween, UITransform, Vec3, tween } from 'cc';
+import * as Meta from '../core/meta/meta';
 import * as Settle from '../core/meta/settle';
 import { App } from '../services/app';
 import { buzz, sfx } from '../services/audio';
@@ -44,8 +45,8 @@ export class ResultPage extends Page {
   }
 
   override show(arg?: unknown): void {
-    App.platform.showBanner('bn_result');
     this.d = arg as Flow.WinData;
+    if (Meta.shouldShowBanner(App.config.ads, this.d.level)) App.platform.showBanner('bn_result');
     this.content.destroyAllChildren();
     const d = this.d;
     const r = d.result;

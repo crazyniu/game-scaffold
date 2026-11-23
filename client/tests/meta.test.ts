@@ -74,6 +74,20 @@ describe('结算与进度', () => {
     const s = fresh(ECO, 1);
     assert.equal(Meta.shouldShowInterstitial(s, ads(), 1, NOW), false);
   });
+
+  it('前几关不出广告：插屏第 15 关起，Banner 第 10 关起；插屏至少隔 2 关、90 秒，刚看完激励视频不弹', () => {
+    const s = fresh(ECO, 1);
+    const a = ads();
+    assert.equal(Meta.shouldShowInterstitial(s, a, 14, 1000), false);
+    assert.equal(Meta.shouldShowInterstitial(s, a, 15, 1000), true);
+    Meta.markInterstitial(s, 15, 1000);
+    assert.equal(Meta.shouldShowInterstitial(s, a, 16, 2000), false, '至少隔 2 关');
+    assert.equal(Meta.shouldShowInterstitial(s, a, 17, 1050), false, '至少隔 90 秒');
+    Meta.markRewarded(s, 1990);
+    assert.equal(Meta.shouldShowInterstitial(s, a, 17, 2000), false, '刚看完激励视频');
+    assert.equal(Meta.shouldShowBanner(a, 9), false);
+    assert.equal(Meta.shouldShowBanner(a, 10), true);
+  });
 });
 
 describe('连击', () => {

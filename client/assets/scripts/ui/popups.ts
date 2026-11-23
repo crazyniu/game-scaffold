@@ -21,6 +21,7 @@ import { fontFor, loadFont, uiFont } from './res';
 import { Screen } from './screen';
 import { ui } from './shell';
 import { lab } from '../devtools/levelLab';
+import * as AutoPlay from '../devtools/autoPlay';
 
 // ---------------------------------------------------------------- 看广告
 
@@ -400,6 +401,8 @@ export function giftPopup(ids: string[], count: number, onDone: () => void): voi
   const line = text(p.body, tr('GIFT_LINE'), 30, { width: 540 });
   at(line.node, 0, -30);
   const ok = button(p.body, { color: 'green', w: 300, h: 100, label: tr('GOT_IT'), onTap: () => p.close() });
+  // 自动玩：没人点，看一眼就自己关
+  if (App.flags.autoplay) fx.delay(p.body, 1.5, () => p.close());
   at(ok.node, 0, -150);
   sfx('coin');
 }
@@ -460,7 +463,7 @@ function languagePopup(): void {
 
 export function settingsPopup(mode: 'home' | 'pause', o: { onHome?: () => void; onRetry?: () => void; onClose?: () => void } = {}): void {
   const s = App.save.data;
-  const extra = (App.platform.hasCapability('ad_test') ? 112 : 0) + (App.platform.hasCapability('privacy_options') ? 112 : 0) + (App.platform.hasCapability('privacy_policy') ? 112 : 0) + (lab.enabled ? 112 : 0);
+  const extra = (App.platform.hasCapability('ad_test') ? 112 : 0) + (App.platform.hasCapability('privacy_options') ? 112 : 0) + (App.platform.hasCapability('privacy_policy') ? 112 : 0) + (lab.enabled ? 112 : 0) + (AutoPlay.enabled() ? 112 : 0);
   const h = mode === 'pause' ? 528 : 512 + extra;
   const p = openPopup({ w: 620, h, title: tr(mode === 'pause' ? 'PAUSE_TITLE' : 'UI_SETTINGS'), onClose: o.onClose });
   const rows: [string, string, keyof typeof s.settings][] = [
@@ -549,6 +552,12 @@ export function settingsPopup(mode: 'home' | 'pause', o: { onHome?: () => void; 
     // 难度调试页（开发版才有，devtools/；调试用，字直接写）
     if (lab.enabled) {
       const b = button(p.body, { color: 'blue', w: 556, h: 88, label: '难度调试', fontSize: 32, onTap: () => (p.close(), ui.go('lab')) });
+      at(b.node, 0, y - 8);
+      y -= 112;
+    }
+    // 自动玩（开发版才有，devtools/autoPlay.ts）：选从第几关开始，机器人一直往下打
+    if (AutoPlay.enabled()) {
+      const b = button(p.body, { color: 'blue', w: 556, h: 88, label: '自动玩', fontSize: 32, onTap: () => (p.close(), AutoPlay.popup()) });
       at(b.node, 0, y - 8);
     }
   } else {

@@ -31,8 +31,11 @@
       "type": "banner"
     }
   },
+  "banner": {
+    "minLevel": 10
+  },
   "interstitial": {
-    "minLevel": 8,
+    "minLevel": 15,
     "minSeconds": 90,
     "minLevelsBetween": 2,
     "skipAfterRewardedSeconds": 60

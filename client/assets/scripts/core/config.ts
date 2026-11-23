@@ -203,6 +203,8 @@ export interface EconomyConfig {
 
 export interface AdsConfig {
   placements: Record<string, { type: 'rewarded' | 'interstitial' | 'banner' }>;
+  /** Banner 从第几关起出（前几关不出广告）；不给 = 一直出 */
+  banner?: { minLevel: number };
   interstitial: {
     minLevel: number;
     minSeconds: number;

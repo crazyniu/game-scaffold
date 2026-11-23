@@ -8,6 +8,7 @@ import { ResultPage } from './game/result';
 import { HomePage } from './pages/home';
 import { AdTestPage } from './pages/adtest';
 import { LabPage } from './devtools/labPage';
+import * as AutoPlay from './devtools/autoPlay';
 import { lab } from './devtools/levelLab';
 import { applyTier, labHooks } from './game/labHooks';
 import { PlatformDebug } from './platform/platformDebug';
@@ -171,7 +172,7 @@ export class Boot extends Component {
       if (ui.currentName !== 'game') ui.refresh();
     };
     // 调试平台：广告弹模拟广告页（docs/01）；机器人代打时直接算看完
-    if (App.platform instanceof PlatformDebug && !App.flags.autoplay) App.platform.view = mockAdView(() => ui.toasts);
+    if (App.platform instanceof PlatformDebug) App.platform.view = mockAdView(() => ui.toasts);
     ui.register('home', () => new HomePage());
     ui.register('game', () => new GamePage());
     ui.register('result', () => new ResultPage());
@@ -192,6 +193,8 @@ export class Boot extends Component {
     if (DEBUG) (globalThis as unknown as Record<string, unknown>).gsDebug = { ui, App, Popups, Flow, signInPopup, profilePopup, closeAllPopups, fitLog, setLanguage: switchLanguage };
     // 调试：直接进关（./run.sh level N、./run.sh auto）；没给关卡号就进当前关
     if (App.flags.play) ui.go('game', { level: App.flags.level > 0 ? App.flags.level : App.save.data.level });
+    // 启动参数 ?autoplay=1：和设置里的「自动玩」一样挂上「停止自动玩」
+    if (App.flags.autoplay) AutoPlay.showStop();
     else if (App.flags.page) ui.go(App.flags.page);
     else ui.go('home');
     // 首页用不到的大图和卡面：首页出来以后在后台接着读，先读局内的，再读结算、开箱用的。

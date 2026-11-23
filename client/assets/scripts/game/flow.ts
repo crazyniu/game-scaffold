@@ -285,8 +285,8 @@ function buySkill(g: GamePage, id: string): void {
 export function pause(g: GamePage): void {
   if (g.ended) return;
   g.paused = true;
-  // 暂停弹窗底部放 Banner（docs/01：结算、暂停弹窗底部）
-  App.platform.showBanner('bn_result');
+  // 暂停弹窗底部放 Banner（docs/01：结算、暂停弹窗底部；前几关不出）
+  if (Meta.shouldShowBanner(App.config.ads, g.arg.level)) App.platform.showBanner('bn_result');
   settingsPopup('pause', {
     onClose: () => {
       g.paused = false;
@@ -631,7 +631,7 @@ function autoStart(level: number): void {
   ui.go('game', { level });
 }
 
-/** 代打：结算页的卡翻完后停一会儿，自己点「下一关」；打完最后一关回主页 */
+/** 代打：结算页的卡翻完后停一会儿，自己点「下一关」（和真人点一样走 afterResult：礼包、插屏照常出）；打完最后一关回主页 */
 export function autoNext(d: WinData): void {
   if (!App.flags.autoplay) return;
   fx.delay(ui.fx, 1.6, () => {
@@ -642,7 +642,7 @@ export function autoNext(d: WinData): void {
       ui.go('home');
       return;
     }
-    autoStart(d.level + 1);
+    void afterResult(d, true);
   });
 }
 

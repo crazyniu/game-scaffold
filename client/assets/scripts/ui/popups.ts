@@ -470,15 +470,15 @@ export function settingsPopup(mode: 'home' | 'pause', o: { onHome?: () => void; 
   const extra = (adTest ? 112 : 0) + (App.platform.hasCapability('privacy_options') ? 112 : 0) + (App.platform.hasCapability('privacy_policy') ? 112 : 0) + (labOn ? 112 : 0);
   const h = mode === 'pause' ? 528 : 512 + extra;
   const p = openPopup({ w: 620, h, title: tr(mode === 'pause' ? 'PAUSE_TITLE' : 'UI_SETTINGS'), onClose: o.onClose });
-  // 隐藏入口：标题「设置」10 秒内连点 10 下打开测试模式，重开设置就出测试按钮。点着没声音、不缩放，看不出能点
+  // 隐藏入口：标题「设置」10 秒内连点 10 下打开测试模式（再连点 10 下关上），重开设置就出（或收起）测试按钮，不弹任何字。点着没声音、不缩放，看不出能点
   const titleBar = mode === 'home' ? p.body.getChildByName('title') : null;
   if (titleBar) {
     onTap(
       titleBar,
       () => {
         if (!TestMode.tap(Date.now())) return;
-        if (!TestMode.isOn()) TestMode.set(true);
-        ui.toast('测试模式已打开');
+        // 开着再连点 10 下就关上；不出任何字，别人看不出有这回事
+        TestMode.set(!TestMode.isOn());
         p.close();
         settingsPopup(mode, o);
       },

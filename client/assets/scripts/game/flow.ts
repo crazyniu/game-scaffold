@@ -251,7 +251,14 @@ function buySkill(g: GamePage, id: string): void {
     icon: 'icon/coin',
     label: String(price),
     onTap: () => {
-      if (!spend(price)) return;
+      const grant = () => {
+        Skills.add(App.save.data, id);
+        App.save.write();
+        p.close();
+        g.refreshSkills();
+      };
+      // 金币不够：看广告直接领 1 个（docs/01 7.1）
+      if (!spend(price, { icon: `icon/skill_${id}`, placement: 'rv_tool', grant })) return;
       Skills.buy(App.save.data, eco, id);
       App.save.write();
       sfx('coin');

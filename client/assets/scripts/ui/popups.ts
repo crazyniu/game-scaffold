@@ -202,14 +202,32 @@ export function rewardPopup(
 // ---------------------------------------------------------------- 金币不足
 
 /** 还差多少金币；主按钮「看广告领 N 金币」，次数用完或广告不可用时只给一行提示（docs/01） */
-export function needCoins(short: number, after?: () => void): void {
+export function needCoins(short: number, after?: () => void, item?: AdItem): void {
   const eco = App.config.eco;
   const p = openPopup({ w: 600, h: 520, title: tr('H_NEED_COINS'), mascot: null });
-  const coins = img(p.body, 'icon/coin', 180, 180, 'coins');
+  const coins = img(p.body, item ? item.icon : 'icon/coin', 180, 180, 'coins');
   at(coins, 0, 90);
   fx.rays(p.body, 300).setSiblingIndex(0);
   const l = text(p.body, tr('H_NEED_COINS_LINE', short), 40);
   at(l.node, 0, -40);
+  // 买的是一样东西（技能等）：看广告直接领这一个，不限次数（给金币买不起，等于白看）
+  if (item && App.platform.adsAvailable()) {
+    const b = button(p.body, {
+      color: 'yellow',
+      w: 480,
+      h: 100,
+      icon: 'kit/ic_video',
+      label: tr('H_WATCH_AD'),
+      fontSize: 36,
+      onTap: async () => {
+        if (!(await watchAd(item.placement))) return;
+        p.close();
+        item.grant();
+      },
+    });
+    at(b.node, 0, -160);
+    return;
+  }
   const left = Meta.freeCoinLeft(App.save.data, eco, today());
   if (left > 0 && App.platform.adsAvailable()) {
     const b = button(p.body, {
@@ -236,11 +254,18 @@ export function needCoins(short: number, after?: () => void): void {
   }
 }
 
-/** 花金币前先问够不够：够返回 true（不扣，扣钱由调用方或 core 的 buy 做一次）；不够弹「金币不足」 */
-export function spend(cost: number): boolean {
+/** 金币不够时看广告直接拿的这一样东西：icon 图标、placement 广告位、grant 看完以后给它 */
+export interface AdItem {
+  icon: string;
+  placement: string;
+  grant: () => void;
+}
+
+/** 花金币前先问够不够：够返回 true（不扣，扣钱由调用方或 core 的 buy 做一次）；不够弹「金币不足」（买的是一样东西时给「看广告领这一个」） */
+export function spend(cost: number, item?: AdItem): boolean {
   const s = App.save.data;
   if (s.coins >= cost) return true;
-  needCoins(cost - s.coins);
+  needCoins(cost - s.coins, undefined, item);
   return false;
 }
 

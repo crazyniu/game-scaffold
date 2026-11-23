@@ -276,7 +276,13 @@ export class ShopPage extends Page {
     const s = App.save.data;
     const eco = App.config.eco;
     const price = Skills.price(eco, id);
-    if (!spend(price)) return;
+    // 金币不够：看广告直接领 1 个（docs/01 7.1）
+    const grant = () => {
+      Skills.add(App.save.data, id);
+      App.save.write();
+      ui.refresh();
+    };
+    if (!spend(price, { icon: `icon/skill_${id}`, placement: 'rv_tool', grant })) return;
     if (!Skills.buy(s, eco, id)) return;
     App.save.write();
     sfx('coin');

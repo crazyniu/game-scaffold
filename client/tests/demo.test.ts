@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as Bot from '../assets/scripts/core/demo/bot';
-import { covers, estimateSeconds, generate, isRelease, kindOf, paceLimit, targetFor } from '../assets/scripts/core/demo/level';
+import { covers, estimateSeconds, generate, generateTemplate, isRelease, kindOf, LevelSeeds, paceLimit, targetFor, templateFor, tierFor, transform } from '../assets/scripts/core/demo/level';
 import { pickLevel } from '../assets/scripts/core/levelPick';
 import * as Rules from '../assets/scripts/core/demo/rules';
 import { GameState, LoseReason, Status } from '../assets/scripts/core/demo/rules';
@@ -12,8 +12,9 @@ import { CONFIG, levels } from './helpers';
 
 const CFG = levels();
 /** 每关挑好的候选（./run.sh level-pick） */
-const SEEDS = (JSON.parse(readFileSync(join(CONFIG, 'level_seeds.json'), 'utf8')) as { seeds: Record<string, number> }).seeds;
-const gen = (id: number, ease = 0) => generate(CFG, id, ease, 0, SEEDS[String(id)] ?? 0);
+const TABLE = JSON.parse(readFileSync(join(CONFIG, 'level_seeds.json'), 'utf8')) as LevelSeeds;
+const SEEDS = TABLE.seeds;
+const gen = (id: number, ease = 0) => generate(CFG, id, ease, 0, TABLE);
 
 describe('关卡生成', () => {
   it('每一关都生成得出来：块数是 3 的倍数、每种图案块数是 3 的倍数、参考解按顺序点一定过', () => {
@@ -33,23 +34,51 @@ describe('关卡生成', () => {
     assert.deepEqual(generate(CFG, 37), generate(CFG, 37));
   });
 
-  it('难度分 3 档按「放松关、普通关、普通关、难关」轮换：第 8 关起每 4 关一个难关，每 20 关一个超难关', () => {
+  it('关卡类型：第 8 关起每 4 关一个难关，每 20 关一个超难关，难关后面那一关是放松位', () => {
     assert.deepEqual([4, 7, 8, 9, 10, 11, 12].map((id) => kindOf(CFG, id)), ['normal', 'normal', 'hard', 'normal', 'normal', 'normal', 'hard']);
     assert.equal(kindOf(CFG, CFG.bossEvery), 'boss');
     assert.ok(isRelease(CFG, 9) && isRelease(CFG, 21) && !isRelease(CFG, 10));
-    assert.ok(generate(CFG, CFG.bossEvery).kinds > generate(CFG, CFG.bossEvery - 1).kinds);
-    assert.ok(generate(CFG, 24).tiles.length > generate(CFG, 23).tiles.length, '难关多一组');
   });
 
-  it('目标：教学关不挑；第 4–9 关缓一档；第 10 关起开始难；放松关多 10 个点', () => {
-    const t = CFG.targets!;
-    assert.equal(targetFor(CFG, t.tutorialUntil), null);
-    assert.equal(targetFor(CFG, 4), t.early!.normal);
-    assert.equal(targetFor(CFG, 8), t.early!.hard);
-    assert.equal(targetFor(CFG, 10), t.normal);
-    assert.equal(targetFor(CFG, 12), t.hard);
-    assert.equal(targetFor(CFG, 20), t.boss);
-    assert.equal(targetFor(CFG, 21), t.normal + t.releasePlus);
+  it('难度 5 档（docs/02 5.9）：前 5 关教学；第 5–50 关 5 档都出现；50 关以后没有放松；目标照档；越往后难的档越多', () => {
+    const tiers = CFG.tiers!;
+    for (let id = 1; id <= CFG.targets!.tutorialUntil; id++) assert.equal(targetFor(CFG, id), null, `第 ${id} 关是教学`);
+    const seen = new Set<string>();
+    for (let id = 5; id <= 50; id++) seen.add(String(tierFor(CFG, id)));
+    for (const k of Object.keys(tiers)) assert.ok(seen.has(k), `第 5–50 关没有 ${tiers[k].name}`);
+    for (let id = 51; id <= CFG.total; id++) assert.notEqual(tierFor(CFG, id), 't1', `第 ${id} 关`);
+    for (let id = 6; id <= CFG.total; id++) assert.equal(targetFor(CFG, id), tiers[tierFor(CFG, id) as string].target, `第 ${id} 关`);
+    const hardShare = (a: number, b: number) => {
+      let n = 0;
+      for (let id = a; id <= b; id++) if (['t3', 't4', 't5'].includes(String(tierFor(CFG, id)))) n++;
+      return n / (b - a + 1);
+    };
+    assert.ok(hardShare(81, 120) > hardShare(21, 40), '后面难的档更多');
+  });
+
+  it('模板（docs/02 5.9）：第 templatesFrom 关起从模板来；换图案、镜像以后参考解照样过、每种图案块数不变；同一个模板前后至少隔 templateGap 关', () => {
+    const from = CFG.templatesFrom!;
+    assert.equal(templateFor(CFG, from - 1), null);
+    const uses = new Map<string, number[]>();
+    for (let id = from; id <= CFG.total; id++) {
+      const t = templateFor(CFG, id)!;
+      assert.equal(t.tier, tierFor(CFG, id));
+      const k = `${t.tier}_${t.slot}`;
+      uses.set(k, [...(uses.get(k) ?? []), id]);
+    }
+    for (const [k, ids] of uses) for (let i = 1; i < ids.length; i++) assert.ok(ids[i] - ids[i - 1] >= CFG.templateGap!, `${k}：${ids.join(' ')}`);
+    assert.equal(uses.size, Object.values(CFG.tiers!).reduce((n, t) => n + t.count, 0), '每个模板都用上');
+    // 同一个模板的两关：结构一样（块数、层），图案换过
+    const [a, b] = [...uses.values()].find((ids) => ids.length >= 2)!;
+    const la = gen(a);
+    const lb = gen(b);
+    assert.equal(la.tiles.length, lb.tiles.length);
+    assert.notDeepEqual(la.tiles.map((t) => t.kind), lb.tiles.map((t) => t.kind));
+    const base = generateTemplate(CFG, 't2', 0);
+    const out = transform(CFG, base, 77);
+    const s = GameState.fromLevel(out);
+    for (const i of out.ref) Rules.tap(s, i);
+    assert.equal(s.status, Status.WON, '换完参考解照样过');
   });
 
   it('单局时长不超过这种关的上限（docs/02 第 5 节）', () => {
@@ -59,21 +88,10 @@ describe('关卡生成', () => {
     }
   });
 
-  it('难关、超难关之后的那一关放松：图案比再下一个普通关少', () => {
-    for (let h = 24; h + 2 <= CFG.total; h += CFG.hardEvery) {
-      const relax = generate(CFG, h + 1);
-      const next = generate(CFG, h + 2);
-      assert.ok(relax.kinds < next.kinds, `第 ${h + 1} 关不比第 ${h + 2} 关松`);
-    }
-  });
-
-  it('第 41 关起难度持平：普通关的图案数、块数都一样', () => {
-    const base = generate(CFG, 42);
-    for (let id = 42; id <= CFG.total; id++) {
-      const lv = generate(CFG, id);
-      if (lv.kind !== 'normal' || kindOf(CFG, id - 1) !== 'normal') continue;
-      assert.equal(lv.kinds, base.kinds, `第 ${id} 关`);
-      assert.equal(lv.tiles.length, base.tiles.length, `第 ${id} 关`);
+  it('同一档的关规模一样（模板关）：块数照这一档', () => {
+    for (let id = CFG.templatesFrom!; id <= CFG.total; id++) {
+      const t = CFG.tiers![tierFor(CFG, id) as string];
+      assert.equal(gen(id).tiles.length, t.kinds * t.sets * 3, `第 ${id} 关`);
     }
   });
 

@@ -264,6 +264,14 @@ export interface LevelsConfig {
     boss: number;
     releasePlus: number;
   };
+  /**
+   * 5 档难度（docs/02 第 5.9 节）：每档的规模（图案种数、每种几组、层数）、过关率目标、有几个模板。
+   * mix 是档位配比（第一行以前是教学期）；第 templatesFrom 关起每关从这一档的模板换图案、换摆法得来，同一个模板前后至少隔 templateGap 关
+   */
+  tiers?: Record<string, { name: string; kinds: number; sets: number; layers: number; target: number; count: number }>;
+  mix?: [number, string[], string][];
+  templatesFrom?: number;
+  templateGap?: number;
   /** 挑候选（./run.sh level-pick）：每关几个候选、初量几局、复量几局；bot.slip 是机器人手滑的概率 */
   pick?: { candidates: number; games: number; checkGames: number; bot: { slip: number } };
 }

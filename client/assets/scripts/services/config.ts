@@ -1,7 +1,7 @@
 // 配置表：assets/resources/config 下的 JSON（数值只在这里，CLAUDE.md 硬性约束 5）。启动时读一次。
 import { JsonAsset, resources } from 'cc';
 import type { AdsConfig, CardDef, EconomyConfig, GameUiConfig, LevelsConfig } from '../core/config';
-import { DemoLevel, generate, kindOf } from '../core/demo/level';
+import { DemoLevel, generate, kindOf, LevelSeeds, NO_SEEDS } from '../core/demo/level';
 import { lab } from '../devtools/levelLab';
 
 function describe(v: unknown): string {
@@ -26,8 +26,8 @@ export class Config {
   eco!: EconomyConfig;
   ads!: AdsConfig;
   levels!: LevelsConfig;
-  /** 每关用第几个候选（config/level_seeds.json，./run.sh level-pick 挑的；docs/02 第 5.8 节） */
-  seeds: Record<string, number> = {};
+  /** 每关、每个模板用第几个候选（config/level_seeds.json，./run.sh level-pick 挑的；docs/02 第 5.8、5.9 节） */
+  seeds: LevelSeeds = NO_SEEDS;
   ui!: GameUiConfig;
   cards: CardDef[] = [];
   cardById = new Map<string, CardDef>();
@@ -39,9 +39,9 @@ export class Config {
       loadJson<LevelsConfig>('config/levels'),
       loadJson<{ cards: CardDef[] }>('config/cards'),
       loadJson<GameUiConfig>('config/game_ui'),
-      loadJson<{ seeds: Record<string, number> }>('config/level_seeds'),
+      loadJson<LevelSeeds>('config/level_seeds'),
     ]);
-    this.seeds = seeds.seeds;
+    this.seeds = seeds;
     this.ui = ui;
     this.eco = eco;
     this.ads = ads;
@@ -67,6 +67,6 @@ export class Config {
   async loadLevel(fileId: number, ease: number, trayDelta = 0): Promise<DemoLevel> {
     const custom = lab.override(fileId);
     const e = custom && typeof custom.ease === 'number' ? custom.ease : ease;
-    return generate(this.levels, fileId, e, trayDelta, this.seeds[String(fileId)] ?? 0);
+    return generate(this.levels, fileId, e, trayDelta, this.seeds);
   }
 }

@@ -4,21 +4,21 @@ import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { LevelsConfig } from '../../assets/scripts/core/config';
-import { estimateSeconds, generate, paceLimit } from '../../assets/scripts/core/demo/level';
+import { estimateSeconds, generate, paceLimit, LevelSeeds } from '../../assets/scripts/core/demo/level';
 import * as Rules from '../../assets/scripts/core/demo/rules';
 import { GameState, Status } from '../../assets/scripts/core/demo/rules';
 
 const CONFIG = join(dirname(fileURLToPath(import.meta.url)), '../../assets/resources/config');
 const cfg = JSON.parse(readFileSync(join(CONFIG, 'levels.json'), 'utf8')) as LevelsConfig;
 // 每关用 ./run.sh level-pick 挑好的那个候选（docs/02 第 5.8 节）
-const seeds = (JSON.parse(readFileSync(join(CONFIG, 'level_seeds.json'), 'utf8')) as { seeds: Record<string, number> }).seeds;
+const seeds = JSON.parse(readFileSync(join(CONFIG, 'level_seeds.json'), 'utf8')) as LevelSeeds;
 const [from = 1, to = cfg.total] = process.argv.slice(2).map(Number);
 let bad = 0;
 const slow: string[] = [];
 const t0 = Date.now();
 for (let id = from; id <= to; id++) {
   for (let ease = 0; ease <= 2; ease++) {
-    const lv = generate(cfg, id, ease, 0, seeds[String(id)] ?? 0);
+    const lv = generate(cfg, id, ease, 0, seeds);
     const s = GameState.fromLevel(lv);
     for (const i of lv.ref) Rules.tap(s, i);
     const sec = estimateSeconds(cfg, lv);

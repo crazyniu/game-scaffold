@@ -1,5 +1,5 @@
 {
- "_comment": "示例玩法的关卡参数（core/demo/level.ts 按它现场生成关卡，保证可解）。排法照 docs/02 第 5 节：前 3 关教学，难度分 3 档按「放松关、普通关、普通关、难关」轮换（第 8 关起每 4 关一个难关），第 10 关起开始难，第 41 关起持平。每关用哪个候选由 ./run.sh level-pick 按 targets 挑（第 5.8 节，写进 level_seeds.json）。换玩法时换成自己的参数或关卡文件",
+ "_comment": "示例玩法的关卡参数（core/demo/level.ts 按它现场生成关卡，保证可解）。排法照 docs/02 第 5 节：前 5 关教学；第 6 关起每关是 5 档难度之一（放松、普通、难、很难、超难，tiers），按 mix 的档位配比轮（第 5–50 关 5 档都出现，50 关以后没有放松，越往后难的档越多）；第 6–20 关逐关生成（segments 管规模），第 21 关起从这一档的模板换图案、左右镜像得来（第 5.9 节）。每关 / 每个模板用哪个候选由 ./run.sh level-pick 按目标挑（第 5.8 节，写进 level_seeds.json）。换玩法时换成自己的参数或关卡文件",
  "total": 120,
  "hardEvery": 4,
  "hardFrom": 8,
@@ -21,14 +21,14 @@
   {
    "from": 4,
    "kinds": [
-    9,
-    11
+    11,
+    12
    ],
    "sets": [
     2,
     2
    ],
-   "layers": 4
+   "layers": 5
   },
   {
    "from": 10,
@@ -92,12 +92,7 @@
   "boss": 180
  },
  "targets": {
-  "tutorialUntil": 3,
-  "early": {
-   "until": 9,
-   "normal": 0.6,
-   "hard": 0.45
-  },
+  "tutorialUntil": 5,
   "normal": 0.4,
   "hard": 0.25,
   "boss": 0.15,
@@ -110,5 +105,109 @@
   "bot": {
    "slip": 0.1
   }
- }
+ },
+ "tiers": {
+  "t1": {
+   "name": "放松",
+   "kinds": 13,
+   "sets": 2,
+   "layers": 5,
+   "target": 0.5,
+   "count": 3
+  },
+  "t2": {
+   "name": "普通",
+   "kinds": 14,
+   "sets": 2,
+   "layers": 5,
+   "target": 0.4,
+   "count": 10
+  },
+  "t3": {
+   "name": "难",
+   "kinds": 14,
+   "sets": 3,
+   "layers": 5,
+   "target": 0.3,
+   "count": 6
+  },
+  "t4": {
+   "name": "很难",
+   "kinds": 15,
+   "sets": 3,
+   "layers": 5,
+   "target": 0.22,
+   "count": 4
+  },
+  "t5": {
+   "name": "超难",
+   "kinds": 15,
+   "sets": 3,
+   "layers": 5,
+   "target": 0.15,
+   "count": 3
+  }
+ },
+ "mix": [
+  [
+   6,
+   [
+    "t1",
+    "t2",
+    "t2",
+    "t3"
+   ],
+   "t4"
+  ],
+  [
+   21,
+   [
+    "t1",
+    "t2",
+    "t2",
+    "t3"
+   ],
+   "t5"
+  ],
+  [
+   41,
+   [
+    "t1",
+    "t2",
+    "t2",
+    "t3",
+    "t1",
+    "t2",
+    "t2",
+    "t4"
+   ],
+   "t5"
+  ],
+  [
+   51,
+   [
+    "t2",
+    "t2",
+    "t2",
+    "t3",
+    "t2",
+    "t2",
+    "t2",
+    "t4"
+   ],
+   "t5"
+  ],
+  [
+   81,
+   [
+    "t2",
+    "t2",
+    "t3",
+    "t4"
+   ],
+   "t5"
+  ]
+ ],
+ "templatesFrom": 21,
+ "templateGap": 12
 }

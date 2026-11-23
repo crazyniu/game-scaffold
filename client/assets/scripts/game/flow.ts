@@ -618,14 +618,6 @@ export function revealPending(cards: CardResult[], done: () => void): void {
 
 // ---------------------------------------------------------------- 机器人代打（调试，./run.sh auto）
 
-/** 自动玩每关连输了几次（过了就清掉）：连输 2 次以后按参考解打（gameView 的代打） */
-const autoFails = new Map<number, number>();
-
-/** 自动玩这一关该不该按参考解打（连输 2 次了） */
-export function autoUseRoute(level: number): boolean {
-  return (autoFails.get(level) ?? 0) >= 2;
-}
-
 /** 代打打到第几关为止 */
 function autoLast(): number {
   const to = App.flags.autoTo;
@@ -645,7 +637,6 @@ export function autoNext(d: WinData): void {
   fx.delay(ui.fx, 1.6, () => {
     // 等的时候有人点了「下一关」或回主页，就不再替他点
     if (ui.pageName !== 'result') return;
-    autoFails.delete(d.level);
     if (d.level >= autoLast()) {
       App.flags.autoplay = false;
       ui.go('home');
@@ -663,7 +654,6 @@ function autoRetry(g: GamePage): void {
   Meta.failLevel(App.save.data, App.config.eco, g.arg.level);
   App.save.write();
   const level = g.arg.level;
-  autoFails.set(level, (autoFails.get(level) ?? 0) + 1);
   fx.delay(g.node, 1.2, () => autoStart(level));
 }
 

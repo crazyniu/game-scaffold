@@ -43,9 +43,12 @@ export const labHooks: LabHooks = {
     const b = App.config.ui.labTiers[t + 1].tray;
     return `暂存槽 ${b > 0 ? `多 ${b} 格` : b < 0 ? `少 ${-b} 格` : '照设计'}，连击窗口 ${App.config.eco.combo.windowSeconds} 秒`;
   },
+  // 作弊按钮只在开发版出：上架包里谁碰巧打开了测试模式也刷不了金币、生命、进度
+  devBuild: () => App.platform.isDevBuild(),
   extras: [
     {
       label: '金币 +1000',
+      devOnly: true,
       run: () => {
         App.save.data.coins += 1000;
         App.save.write();
@@ -55,6 +58,7 @@ export const labHooks: LabHooks = {
     },
     {
       label: '生命补满',
+      devOnly: true,
       run: () => {
         Lives.add(App.save.data, App.config.eco, App.config.eco.lives.max, now());
         App.save.write();
@@ -63,6 +67,7 @@ export const labHooks: LabHooks = {
     },
     {
       label: '进度到这关',
+      devOnly: true,
       run: (id) => {
         App.save.data.level = id;
         App.save.write();

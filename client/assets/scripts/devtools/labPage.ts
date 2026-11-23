@@ -27,7 +27,9 @@ export interface LabHooks {
   /** 整体档的说明（切换后显示在下面），如「暂存槽少 1 格，连击窗口 1.5 秒」 */
   tierNote?(tier: number): string;
   /** 作弊按钮（金币、生命、进度……），三个一排；id 是页面上正在看的关 */
-  extras?: { label: string; run: (id: number) => void }[];
+  extras?: { label: string; run: (id: number) => void; devOnly?: boolean }[];
+  /** 是不是开发版：devOnly 的作弊按钮（金币、生命、进度）只在开发版出，上架包的测试模式里没有 */
+  devBuild?(): boolean;
 }
 
 const ROW_H = 84;
@@ -199,7 +201,7 @@ export class LabPage extends Page {
       y -= 60;
     }
 
-    const extras = this.hooks.extras ?? [];
+    const extras = (this.hooks.extras ?? []).filter((e) => !e.devOnly || !!this.hooks.devBuild?.());
     extras.forEach((e, i) => {
       const b = button(c, { color: 'yellow', w: 220, h: 80, label: e.label, fontSize: 28, onTap: () => e.run(this.level) });
       at(b.node, -235 + (i % 3) * 235, y - Math.floor(i / 3) * 96);

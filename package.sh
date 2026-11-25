@@ -87,6 +87,34 @@ ios_sdk() {
   ls "$dir"
 }
 
+# iOS 的 Firebase（Analytics + Crashlytics）：game.json 开了 firebase、并且放了 firebase/GoogleService-Info.plist 时，
+# 下载官方的 Firebase.zip（约 400 MB，只下一次），把要用的那几个 xcframework 拷到 client/native/engine/ios/sdk/firebase/（不进仓库）。
+# 版本固定在 FIREBASE_IOS_VERSION，升级时改这里、删掉 sdk/firebase/ 重下。上架包拿不到就停下，测试包按没有 Firebase 编译
+FIREBASE_IOS_VERSION=13.2.0
+ios_firebase_sdk() {
+  local mode="${1:-}" dir="$CLIENT/native/engine/ios/sdk/firebase" tmp sub
+  [ -f "$CLIENT/native/engine/ios/GoogleService-Info.plist" ] || return 0
+  if [ ! -f "$dir/.version" ] || [ "$(cat "$dir/.version")" != "$FIREBASE_IOS_VERSION" ]; then
+    echo "· 下载 Firebase iOS SDK ${FIREBASE_IOS_VERSION}（约 400 MB）…"
+    tmp="$(mktemp -d)"
+    if curl -fL --progress-bar -o "$tmp/firebase.zip" "https://github.com/firebase/firebase-ios-sdk/releases/download/${FIREBASE_IOS_VERSION}/Firebase.zip" \
+      && (cd "$tmp" && unzip -q firebase.zip 'Firebase/FirebaseAnalytics/*' 'Firebase/FirebaseCrashlytics/*'); then
+      rm -rf "$dir"; mkdir -p "$dir"
+      # 拷的时候保留符号链接（Firebase 的说明：不然签名会坏）
+      for sub in FirebaseAnalytics FirebaseCrashlytics; do
+        (cd "$tmp/Firebase/$sub" && cp -RP ./* "$dir/")
+      done
+      echo "$FIREBASE_IOS_VERSION" > "$dir/.version"
+    fi
+    rm -rf "$tmp"
+  fi
+  if [ ! -d "$dir/FirebaseCore.xcframework" ] || [ ! -x "$dir/upload-symbols" ]; then
+    [ "$mode" = ipa ] && die "Firebase SDK 没下载下来：上架包不能没有统计，检查网络后重试"
+    echo "! Firebase SDK 没下载下来，这次按没有 Firebase 编译（测试包）"
+  fi
+  return 0
+}
+
 # Cocos 3.8.8 预编译的 libwebp.a 和 Xcode 27 的链接器不兼容（成员没对齐），用 libtool 重新打包一份对齐的（iOS 工程的 CMakeLists 用它）
 ios_fix_webp() {
   local src dst="$CLIENT/native/engine/ios/sdk/libwebp/libwebp.a"
@@ -108,8 +136,9 @@ ios_project() {
 ios_build() {
   local mode="${1:-}" proj scheme team
   # 只有 IPA（传 App Store）用真实广告位，其它产物用 Google 的测试广告位（tools/native/apply.mjs）
-  GAME_RELEASE="$([ "$mode" = ipa ] && echo 1 || echo 0)" node tools/native/apply.mjs
+  GAME_RELEASE="$([ "$mode" = ipa ] && echo 1 || echo 0)" GAME_TARGET=ios node tools/native/apply.mjs || die "按 game.json 改写原生工程失败"
   ios_sdk "$mode"
+  ios_firebase_sdk "$mode"
   ios_fix_webp
   # Preserve the working tree's launch artwork while Creator exports its templates.
   (
@@ -137,7 +166,13 @@ ios_build() {
       xcodebuild -project "$proj" -scheme "$scheme" -sdk iphonesimulator -configuration Debug ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
         -derivedDataPath "$CLIENT/build/ios/derived" CODE_SIGNING_ALLOWED=NO build > "$CLIENT/build/ios/sim.log" 2>&1 \
         || { grep -E "error:|BUILD FAILED" "$CLIENT/build/ios/sim.log" | head -30; die "模拟器版编译失败（全文 client/build/ios/sim.log）"; }
-      echo "✓ 模拟器版编译通过：client/build/ios/derived/Build/Products/Debug-iphonesimulator/"
+      # Cocos 生成的工程在模拟器上排除了 arm64（EXCLUDED_ARCHS，引擎的预编译库没有 arm64 模拟器切片），只编 arm64 时 xcodebuild
+      # 什么都不编也报成功。没编出可执行文件就照实说，别当编译通过
+      local simapp
+      simapp="$(ls -td "$CLIENT"/build/ios/proj/Debug-iphonesimulator/*.app "$CLIENT"/build/ios/derived/Build/Products/Debug-iphonesimulator/*.app 2>/dev/null | head -1 || true)"
+      [ -n "$simapp" ] && [ -f "$simapp/$(basename "$simapp" .app)" ] \
+        || die "模拟器版没有编出可执行文件（Cocos 的工程在模拟器上排除了 arm64），这台 Mac 上模拟器版用不了；查编译用「3 未签名真机 App」"
+      echo "✓ 模拟器版编译通过：${simapp}"
       ;;
     dev)
       xcodebuild -project "$proj" -scheme "$scheme" -sdk iphoneos -configuration Release \
@@ -188,10 +223,25 @@ PLIST
       xcodebuild -exportArchive -archivePath "$out/app.xcarchive" -exportPath "$out" \
         -exportOptionsPlist "$out/ExportOptions.plist" -allowProvisioningUpdates > "$out/export.log" 2>&1 \
         || { tail -20 "$out/export.log"; die "导出 ipa 失败"; }
+      ios_upload_dsyms "$out/app.xcarchive"
       echo "✓ ipa：$(ls "$out"/*.ipa)（菜单「6 上传 App Store Connect」直接传，或用 Transporter 上传）"
       ;;
     *) die "未知的 iOS 产物" ;;
   esac
+}
+
+# 带 Firebase 的上架包：把归档里的 dSYM 传给 Crashlytics，崩溃堆栈才看得懂（传失败不挡上架，提示手动补传）
+ios_upload_dsyms() {
+  local archive="$1" tool="$CLIENT/native/engine/ios/sdk/firebase/upload-symbols" plist="$CLIENT/native/engine/ios/GoogleService-Info.plist"
+  [ -f "$plist" ] && [ -x "$tool" ] || return 0
+  if [ ! -d "$archive/dSYMs" ] || [ -z "$(ls "$archive/dSYMs")" ]; then
+    echo "! 归档里没有 dSYM，Crashlytics 的崩溃堆栈会看不懂"
+    return 0
+  fi
+  echo "· 把 dSYM 传给 Crashlytics …"
+  "$tool" -gsp "$plist" -p ios "$archive/dSYMs" > "$CLIENT/build/ios/release/dsym.log" 2>&1 \
+    && echo "✓ dSYM 已传给 Crashlytics" \
+    || echo "! dSYM 没传上（全文 client/build/ios/release/dsym.log）；之后补传：${tool} -gsp ${plist} -p ios ${archive}/dSYMs"
 }
 
 # 把上一次「4 IPA」打好的归档传到 App Store Connect：用 Xcode 里登录的开发者账号（Xcode → Settings → Accounts），不另要密码。
@@ -303,7 +353,7 @@ android_build() {
   local mode="${1:-apk}" proj
   # 只有 AAB（传 Google Play）用真实广告位，其它产物用 Google 的测试广告位（tools/native/apply.mjs）
   [ "$mode" != aab ] || android_upload_key
-  GAME_RELEASE="$([ "$mode" = aab ] && echo 1 || echo 0)" node tools/native/apply.mjs
+  GAME_RELEASE="$([ "$mode" = aab ] && echo 1 || echo 0)" GAME_TARGET=android node tools/native/apply.mjs || die "按 game.json 改写原生工程失败"
   local sdk ndk cfg cand
   # SDK：ANDROID_HOME，或者 Android Studio 的默认位置，或者外接盘上的 /Volumes/*/Android/sdk（Mac 上的 SDK 装在外接盘 /Volumes/Lexar/Android/sdk）
   sdk="${ANDROID_HOME:-}"
@@ -350,6 +400,11 @@ android_build() {
       [ -n "$aab" ] || die "没找到打好的 AAB"
       "$(find_keytool)" -printcert -rfc -jarfile "$aab" 2>/dev/null | grep -q -- '-----BEGIN CERTIFICATE-----' || die "${aab} 没有签名（检查 ~/.gradle/gradle.properties 的 RELEASE_ 变量）"
       android_check_16k "$aab" "$ndk" || die "16 KB 内存页检查没过，这个 AAB 不要传（${aab}）"
+      # 带 Firebase 时：把引擎带符号的 .so 传给 Crashlytics（C++ 崩溃堆栈才看得懂；Java 的混淆表 bundleRelease 已经自动传了）
+      if grep -q '^def GAME_FIREBASE = true' "$CLIENT/native/engine/android/app/build.gradle"; then
+        (cd "$proj" && ./gradlew uploadCrashlyticsSymbolFileRelease) \
+          || echo "! 引擎符号没传给 Crashlytics（不挡上架）；之后在 ${proj} 里补传：./gradlew uploadCrashlyticsSymbolFileRelease"
+      fi
       echo "✓ aab：${aab}（已用上传密钥签名、真实广告位；传到 Google Play Console）" ;;
     *) die "未知的 Android 产物" ;;
   esac

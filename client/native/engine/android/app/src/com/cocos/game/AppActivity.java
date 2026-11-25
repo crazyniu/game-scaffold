@@ -38,7 +38,7 @@ public class AppActivity extends CocosActivity {
         super.onCreate(savedInstanceState);
         // DO OTHER INITIALIZATION BELOW
         SDKWrapper.shared().init(this);
-        // 脚本和原生之间的桥：广告、震动、分享（GameBridge.java）
+        // 脚本和原生之间的桥：广告、统计和崩溃报告、震动、分享（GameBridge.java）
         GameBridge.setup(this);
 
     }

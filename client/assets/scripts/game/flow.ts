@@ -316,7 +316,7 @@ function leave(g: GamePage, then: () => void): void {
   const eco = App.config.eco;
   const costs = !g.arg.daily && g.moved && g.arg.level > eco.lives.freeUntilLevel && !Lives.isUnlimited(s, now());
   const go = () => {
-    endRun(g);
+    endRun(g, 'quit');
     if (!g.arg.daily && g.moved) {
       Lives.lose(s, eco, g.arg.level, true, now());
       Meta.failLevel(s, eco, g.arg.level);
@@ -347,13 +347,17 @@ function restart(g: GamePage): void {
   ui.go('game', { level: g.arg.level });
 }
 
-/** 一局结束（过关、失败、离开）都要做的：最高连击记进存档 */
-function endRun(g: GamePage): void {
+/** 一局结束（过关、失败、离开）都要做的：最高连击记进存档、每日任务、统计 */
+function endRun(g: GamePage, result: 'win' | 'lose' | 'quit'): void {
   const s = App.save.data;
   s.bestCombo = Math.max(s.bestCombo, g.combo.best);
   // 每日任务：输了、中途离开也算；一局只记一次
   if (g.tallied) return;
   g.tallied = true;
+  // 统计（Firebase Analytics 推荐的 level_end，success 记成 1 / 0）；机器人代打不记
+  if (!App.flags.autoplay) {
+    App.platform.track('level_end', { level_name: String(g.arg.level), level: g.arg.level, success: result === 'win', result, daily: !!g.arg.daily, moved: g.moved });
+  }
   const eco = App.config.eco;
   // 玩法：每日任务的计数（任务 id 在 economy.json 的 tasks.pool）
   Tasks.add(s, eco, today(), 'clear', g.cleared);
@@ -455,7 +459,7 @@ function revivePopup(g: GamePage): void {
 function failPopup(g: GamePage): void {
   g.ended = true;
   g.paused = true;
-  endRun(g);
+  endRun(g, 'lose');
   const s = App.save.data;
   const eco = App.config.eco;
   let lost = false;
@@ -523,7 +527,7 @@ export function win(g: GamePage): void {
     demoDone(g, g.arg.demo === 'route' ? `电脑按路线过了：${g.demoStep} 步，没用道具` : `正常打法这局过了（${g.demoStep} 步）`);
     return;
   }
-  endRun(g);
+  endRun(g, 'win');
   const s = App.save.data;
   const eco = App.config.eco;
   if (g.arg.daily) {
@@ -659,7 +663,7 @@ export function autoNext(d: WinData): void {
 function autoRetry(g: GamePage): void {
   g.ended = true;
   g.paused = true;
-  endRun(g);
+  endRun(g, 'lose');
   Meta.failLevel(App.save.data, App.config.eco, g.arg.level);
   App.save.write();
   const level = g.arg.level;

@@ -1,5 +1,6 @@
 // 脚本和 Android 原生之间的桥，事件表见 assets/scripts/platform/platformNative.ts 的文件头（和 iOS 的 GameBridge.mm 同一组）。
 // 广告在 GameAds：开着广告时是 app/ads/on 里的 AdMob 实现，关掉时是 app/ads/off 里的空实现（app/build.gradle 的 GAME_ADS）。
+// 统计和崩溃报告在 GameFirebase：同样分 app/firebase/on 和 app/firebase/off（GAME_FIREBASE）。
 package com.cocos.game;
 
 import android.app.Activity;
@@ -22,6 +23,7 @@ public final class GameBridge {
     /** AppActivity.onCreate 里调一次：注册事件 */
     public static void setup(Activity act) {
         activity = act;
+        GameFirebase.start(act);
         JsbBridgeWrapper bridge = JsbBridgeWrapper.getInstance();
         bridge.addScriptEventListener("game.init", arg -> ui(() -> GameAds.start(activity, parse(arg).optJSONObject("ads"))));
         bridge.addScriptEventListener("game.rewarded", arg -> ui(GameAds::showRewarded));
@@ -29,6 +31,15 @@ public final class GameBridge {
         bridge.addScriptEventListener("game.banner", arg -> ui(() -> GameAds.setBannerVisible(parse(arg).optBoolean("show", false))));
         bridge.addScriptEventListener("game.privacy", arg -> ui(GameAds::openPrivacyOptions));
         bridge.addScriptEventListener("game.vibrate", arg -> ui(() -> vibrate(parse(arg).optString("kind", "medium"))));
+        // 统计、脚本错误：不用切到界面线程
+        bridge.addScriptEventListener("game.track", arg -> {
+            JSONObject o = parse(arg);
+            GameFirebase.track(o.optString("name", ""), o.optJSONObject("params"));
+        });
+        bridge.addScriptEventListener("game.error", arg -> {
+            JSONObject o = parse(arg);
+            GameFirebase.error(o.optString("message", ""), o.optString("stack", ""));
+        });
         bridge.addScriptEventListener("game.share", arg -> ui(() -> share(parse(arg).optString("text", ""))));
     }
 

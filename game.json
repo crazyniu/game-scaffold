@@ -76,6 +76,10 @@
   },
   "privacyPolicy": "",
   "_privacyPolicyComment": "TODO：隐私政策网页地址：商店后台填的也是这个，App 设置里的「隐私政策」打开它（苹果、Google Play 都要求 App 内能打开）",
+  "firebase": {
+    "_comment": "Firebase：统计（Analytics）+ 崩溃报告（Crashlytics），只有 iOS、Android（微信用不了）。enabled 为 true，再把 Firebase 控制台下载的 google-services.json、GoogleService-Info.plist 放进仓库根目录的 firebase/（不进仓库），打包时就编进去；哪个平台的文件没放，那个平台就不带。见 docs/10 第 5.1 节",
+    "enabled": false
+  },
   "levelLab": true,
   "_levelLabComment": "难度调试页：只在开发版出现（编辑器预览、./run.sh 的调试构建），打包的版本自动不出；写 false 连开发版也不出",
   "ads": {

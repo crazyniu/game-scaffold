@@ -3,7 +3,7 @@
 // ./package.sh 选择微信或原生平台 打包前自动跑；改了 game.json 也可以单独跑：node tools/native/apply.mjs
 // 只改下面列出的那几处，别的不动；重复跑结果一样。
 import { fileURLToPath } from 'node:url';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -17,6 +17,12 @@ function write(path, text) {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, text);
   changed.push(path.slice(ROOT.length + 1));
+}
+
+function remove(path) {
+  if (!existsSync(path)) return;
+  rmSync(path);
+  changed.push(path.slice(ROOT.length + 1) + '（删掉）');
 }
 
 function edit(path, fn) {
@@ -57,6 +63,50 @@ const adsOn = game.ads.enabled === true;
 const release = process.env.GAME_RELEASE === '1';
 const units = (platform) => (release || !game.ads.test?.[platform] ? game.ads[platform] : game.ads.test[platform]);
 if (adsOn) console.log(release ? '· 上架包：用 AdMob 的真实广告位' : '· 测试包：用 Google 的测试广告位（上架包才用真实的）');
+
+/**
+ * Firebase（统计 + 崩溃报告，game.json 的 firebase.enabled）：开着、并且仓库根目录的 firebase/ 里放了这个平台的配置文件
+ * （Firebase 控制台下载的 google-services.json / GoogleService-Info.plist，不进仓库）才编进这个平台的包。
+ * 开着却没放：测试包照样打、只是没有 Firebase；上架包（GAME_TARGET 是这个平台）停下，免得传上去的包没有统计
+ */
+const FIREBASE = {
+  android: { file: join(ROOT, 'firebase/google-services.json'), to: join(CLIENT, 'native/engine/android/app/google-services.json') },
+  ios: { file: join(ROOT, 'firebase/GoogleService-Info.plist'), to: join(CLIENT, 'native/engine/ios/GoogleService-Info.plist') },
+};
+const firebaseWanted = game.firebase?.enabled === true;
+const target = process.env.GAME_TARGET ?? '';
+function firebaseOn(platform) {
+  if (!firebaseWanted) return false;
+  const { file } = FIREBASE[platform];
+  if (existsSync(file)) return true;
+  const msg = `game.json 开了 firebase，但没有 ${file.slice(ROOT.length + 1)}（Firebase 控制台 → 项目设置 → 你的应用 → 下载配置文件，docs/10 第 5.1 节）`;
+  if (release && target === platform) throw new Error(`${msg}：上架包不能没有统计，放好再打`);
+  console.log(`! ${msg}，这次 ${platform} 不带 Firebase`);
+  return false;
+}
+/** 配置文件里的包名要和 game.json 的一致：不一致时 Android 编译报错看不懂、iOS 静默收不到数据，这里先查 */
+function checkFirebaseApp(platform) {
+  const { file } = FIREBASE[platform];
+  const text = readFileSync(file, 'utf8');
+  if (platform === 'android') {
+    const names = (JSON.parse(text).client ?? []).map((c) => c.client_info?.android_client_info?.package_name);
+    if (!names.includes(game.android.packageName)) {
+      throw new Error(`firebase/google-services.json 里没有 ${game.android.packageName} 这个应用（里面是 ${names.join('、') || '空的'}）：在 Firebase 控制台按 game.json 的 android.packageName 加 Android 应用，重新下载`);
+    }
+  } else {
+    const id = /<key>BUNDLE_ID<\/key>\s*<string>([^<]*)<\/string>/.exec(text)?.[1];
+    if (id !== game.ios.bundleId) {
+      throw new Error(`firebase/GoogleService-Info.plist 是 ${id ?? '?'} 的，game.json 的 ios.bundleId 是 ${game.ios.bundleId}：在 Firebase 控制台按 bundleId 加 iOS 应用，重新下载`);
+    }
+  }
+  return text;
+}
+/** 把配置文件拷到原生工程里（拷过去的也不进仓库）；这个平台不带 Firebase 时删掉拷过去的那份 */
+function placeFirebase(platform, on) {
+  const { to } = FIREBASE[platform];
+  if (on) write(to, checkFirebaseApp(platform));
+  else remove(to);
+}
 
 // 1. 游戏运行时读的平台配置（platform/platformConfig.ts）
 write(
@@ -133,25 +183,31 @@ if (existsSync(ios)) {
     (adsOn ? `"NSUserTrackingUsageDescription" = "${game.ios.trackingText[lang]}";\n` : '');
   // 各语言的 InfoPlist.strings 由 CMakeLists 构建完拷进 .app（GAME_LPROJ 列目录；Cocos 的模板不带它们，不拷的话各语言的应用名进不了包）
   const lproj = ['Base', ...appLangs.map((l) => LOCALES[l].ios)].join(' ');
-  // 工程名：Cocos 构建时也会这样改写，先写好免得每次构建都有改动；GAME_ADS：链不链广告 SDK
+  // 工程名：Cocos 构建时也会这样改写，先写好免得每次构建都有改动；GAME_ADS：链不链广告 SDK；GAME_FIREBASE：链不链 Firebase
+  const fbIos = firebaseOn('ios');
+  placeFirebase('ios', fbIos);
   edit(join(ios, 'CMakeLists.txt'), (s) =>
     s
       .replace(/set\(APP_NAME "[^"]*"/, `set(APP_NAME "${projectName}"`)
       .replace(/set\(GAME_ADS (ON|OFF)\)/, `set(GAME_ADS ${adsOn ? 'ON' : 'OFF'})`)
+      .replace(/set\(GAME_FIREBASE (ON|OFF)\)/, `set(GAME_FIREBASE ${fbIos ? 'ON' : 'OFF'})`)
       .replace(/set\(GAME_LPROJ [^)]*\)/, `set(GAME_LPROJ ${lproj})`),
   );
   write(join(ios, 'Base.lproj/InfoPlist.strings'), strings('en'));
   for (const l of appLangs) write(join(ios, `${LOCALES[l].ios}.lproj/InfoPlist.strings`), strings(l));
 }
 
-// 4. Android：版本号、AdMob 应用 ID、各语言的应用名；带不带广告 SDK（GAME_ADS）和广告 ID 权限
+// 4. Android：版本号、AdMob 应用 ID、各语言的应用名；带不带广告 SDK（GAME_ADS）和广告 ID 权限；带不带 Firebase（GAME_FIREBASE）
 const android = join(CLIENT, 'native/engine/android');
 if (existsSync(android)) {
+  const fbAndroid = firebaseOn('android');
+  placeFirebase('android', fbAndroid);
   edit(join(android, 'app/build.gradle'), (s) =>
     s
       .replace(/versionCode \d+/, `versionCode ${game.build}`)
       .replace(/versionName "[^"]*"/, `versionName "${game.version}"`)
-      .replace(/def GAME_ADS = (true|false)/, `def GAME_ADS = ${adsOn}`),
+      .replace(/def GAME_ADS = (true|false)/, `def GAME_ADS = ${adsOn}`)
+      .replace(/def GAME_FIREBASE = (true|false)/, `def GAME_FIREBASE = ${fbAndroid}`),
   );
   // 广告 ID 权限：关掉广告时显式去掉（tools:node="remove"），Play 后台的「广告 ID」声明就能选不用
   const AD_ID = /<uses-permission android:name="com\.google\.android\.gms\.permission\.AD_ID"[^>]*\/>/;

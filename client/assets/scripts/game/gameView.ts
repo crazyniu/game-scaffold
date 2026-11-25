@@ -223,6 +223,8 @@ export class GamePage extends Page {
     this.undoSnap = null;
     this.demoStep = 0;
     this.autoT = 0;
+    // 统计（Firebase Analytics 推荐的 level_start）；演示、机器人代打不记
+    if (!this.arg.demo && !App.flags.autoplay) App.platform.track('level_start', { level_name: String(id), level: id, daily: !!this.arg.daily });
     this.autoWait = 1;
     this.idle = 0;
     this.total = this.lv.tiles.length;

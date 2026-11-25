@@ -68,7 +68,7 @@
 
     [self.window makeKeyAndVisible];
     [appDelegateBridge application:UIApplication.sharedApplication didFinishLaunchingWithOptions:_launchOptions];
-    // 脚本和原生之间的桥：广告、震动、分享（game/GameBridge.mm）
+    // 脚本和原生之间的桥：广告、统计和崩溃报告、震动、分享（game/GameBridge.mm）
     [GameBridge setup];
     return self.window;
 }

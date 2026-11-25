@@ -1,10 +1,30 @@
 import org.apache.tools.ant.taskdefs.condition.Os
 
+// Firebase 的两个 Gradle 插件（读 google-services.json、上传 Crashlytics 的符号），GAME_FIREBASE 为 true 时才套用。
+// 写在这里而不是根工程：Gradle 的根工程是 Cocos 每次构建生成的 build/android/proj/build.gradle，改了也会被覆盖
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.google.gms:google-services:4.6.0'
+        classpath 'com.google.firebase:firebase-crashlytics-gradle:3.0.8'
+    }
+}
+
 apply plugin: 'com.android.application'
 
 // 带不带广告 SDK：tools/native/apply.mjs 按 game.json 的 ads.enabled 改写。
 // 关掉时不依赖 AdMob / UMP，GameAds 用 ads/off 里的空实现
 def GAME_ADS = true
+// 带不带 Firebase（统计 + 崩溃报告）：tools/native/apply.mjs 按 game.json 的 firebase.enabled 和 firebase/google-services.json 改写。
+// 关掉时不依赖 Firebase，GameFirebase 用 firebase/off 里的空实现
+def GAME_FIREBASE = false
+if (GAME_FIREBASE) {
+    apply plugin: 'com.google.gms.google-services'
+    apply plugin: 'com.google.firebase.crashlytics'
+}
 
 RES_PATH = RES_PATH.replace("\\", "/")
 COCOS_ENGINE_PATH = COCOS_ENGINE_PATH.replace("\\", "/")
@@ -38,7 +58,7 @@ android {
     }
 
     sourceSets.main {
-        java.srcDirs "../src", "src", GAME_ADS ? "ads/on" : "ads/off"
+        java.srcDirs "../src", "src", GAME_ADS ? "ads/on" : "ads/off", GAME_FIREBASE ? "firebase/on" : "firebase/off"
         res.srcDirs "../res", 'res', "${RES_PATH}/proj/res"
         jniLibs.srcDirs "../libs", 'libs'
         manifest.srcFile "AndroidManifest.xml"
@@ -94,6 +114,11 @@ android {
                 }
             }
 
+            if (GAME_FIREBASE) {
+                // 引擎是 C++：打上架包时把带符号的 .so 传给 Crashlytics，崩溃堆栈才看得懂（package.sh 打完 AAB 跑上传）
+                firebaseCrashlytics { nativeSymbolUploadEnabled true }
+            }
+
             if (!Boolean.parseBoolean(PROP_IS_DEBUG)) {
                 getIsDefault().set(true)
             }
@@ -120,6 +145,12 @@ dependencies {
     if (GAME_ADS) {
         implementation 'com.google.android.gms:play-services-ads:23.6.0'
         implementation 'com.google.android.ump:user-messaging-platform:3.1.0'
+    }
+    // Firebase：统计（Analytics）+ 崩溃报告（Crashlytics，带 NDK：引擎的 C++ 崩溃也收），firebase/on/.../GameFirebase.java 用
+    if (GAME_FIREBASE) {
+        implementation platform('com.google.firebase:firebase-bom:35.2.0')
+        implementation 'com.google.firebase:firebase-analytics'
+        implementation 'com.google.firebase:firebase-crashlytics-ndk'
     }
     if (Boolean.parseBoolean(PROP_ENABLE_INPUTSDK)) {
         implementation 'com.google.android.libraries.play.games:inputmapping:1.1.0-beta'

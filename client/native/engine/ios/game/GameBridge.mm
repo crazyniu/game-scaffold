@@ -4,6 +4,9 @@
 // SDK 由 ./package.sh 选择 iOS 时 下载到 native/engine/ios/sdk/（不进仓库）；game.json 关了广告（CMakeLists 的 GAME_ADS）
 // 或没下载时不链 SDK，照样能编译，只是没有广告（__has_include 判断）：告诉脚本这一版没有广告（off），
 // 看广告的入口隐藏，也不弹广告同意和跟踪授权。
+//
+// 统计 + 崩溃报告：Firebase Analytics + Crashlytics，同样由 ./package.sh 下载到 sdk/firebase/；game.json 没开 firebase
+// （CMakeLists 的 GAME_FIREBASE）、没放 GoogleService-Info.plist 或没下载时不链，game.track / game.error 直接丢掉。
 #import "GameBridge.h"
 
 #import <UIKit/UIKit.h>
@@ -16,6 +19,15 @@
 #define GAME_ADMOB 1
 #else
 #define GAME_ADMOB 0
+#endif
+
+#if __has_include(<FirebaseCore/FirebaseCore.h>)
+#import <FirebaseAnalytics/FirebaseAnalytics.h>
+#import <FirebaseCore/FirebaseCore.h>
+#import <FirebaseCrashlytics/FirebaseCrashlytics.h>
+#define GAME_HAS_FIREBASE 1
+#else
+#define GAME_HAS_FIREBASE 0
 #endif
 
 static NSDictionary *GameParse(NSString *arg) {
@@ -234,10 +246,75 @@ static const NSTimeInterval GAME_RETRY_MAX = 300;
 @end
 #endif
 
+#if GAME_HAS_FIREBASE
+/** game.track：参数只收字符串、数字、布尔（布尔记成 0 / 1），名字和长度脚本那头已经按 Firebase 的规矩截好 */
+static void GameTrack(NSDictionary *o) {
+    NSString *name = o[@"name"];
+    if (![name isKindOfClass:[NSString class]] || name.length == 0 || ![FIRApp defaultApp]) return;
+    NSMutableDictionary *params = [NSMutableDictionary dictionary];
+    NSDictionary *raw = [o[@"params"] isKindOfClass:[NSDictionary class]] ? o[@"params"] : @{};
+    for (NSString *k in raw) {
+        id v = raw[k];
+        if ([v isKindOfClass:[NSNumber class]]) {
+            BOOL isBool = CFGetTypeID((__bridge CFTypeRef)v) == CFBooleanGetTypeID();
+            params[k] = isBool ? @([v boolValue] ? 1 : 0) : v;
+        } else if ([v isKindOfClass:[NSString class]]) {
+            params[k] = v;
+        }
+    }
+    [FIRAnalytics logEventWithName:name parameters:params];
+}
+
+/** game.error：脚本里没接住的错误。按脚本的调用栈（V8 的「    at 函数名 (文件:行:列)」）记成「非致命」问题，Crashlytics 按调用栈归类 */
+static void GameScriptError(NSDictionary *o) {
+    if (![FIRApp defaultApp]) return;
+    NSString *message = [o[@"message"] isKindOfClass:[NSString class]] ? o[@"message"] : @"";
+    NSString *stack = [o[@"stack"] isKindOfClass:[NSString class]] ? o[@"stack"] : @"";
+    static NSRegularExpression *frame;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        frame = [NSRegularExpression regularExpressionWithPattern:@"^\\s*at (?:(.+?) \\()?(.+?):(\\d+):\\d+\\)?\\s*$" options:0 error:nil];
+    });
+    NSMutableArray<FIRStackFrame *> *frames = [NSMutableArray array];
+    for (NSString *line in [stack componentsSeparatedByString:@"\n"]) {
+        NSTextCheckingResult *m = [frame firstMatchInString:line options:0 range:NSMakeRange(0, line.length)];
+        if (!m) continue;
+        NSRange fnRange = [m rangeAtIndex:1];
+        NSString *fn = fnRange.location == NSNotFound ? @"<anonymous>" : [line substringWithRange:fnRange];
+        NSString *file = [[line substringWithRange:[m rangeAtIndex:2]] lastPathComponent];
+        NSInteger lineNo = [[line substringWithRange:[m rangeAtIndex:3]] integerValue];
+        [frames addObject:[FIRStackFrame stackFrameWithSymbol:fn file:file line:lineNo]];
+        if (frames.count >= 64) break;
+    }
+    if (frames.count == 0) [frames addObject:[FIRStackFrame stackFrameWithSymbol:@"<unknown>" file:@"script" line:0]];
+    FIRExceptionModel *model = [FIRExceptionModel exceptionModelWithName:@"ScriptError" reason:message];
+    model.stackTrace = frames;
+    [[FIRCrashlytics crashlytics] recordExceptionModel:model];
+}
+#endif
+
 @implementation GameBridge
 
 + (void)setup {
+#if GAME_HAS_FIREBASE
+    // 包里有 GoogleService-Info.plist 才启动（没有时 FIRApp configure 会直接崩）
+    if (![FIRApp defaultApp] && [[NSBundle mainBundle] pathForResource:@"GoogleService-Info" ofType:@"plist"]) [FIRApp configure];
+#endif
     JsbBridgeWrapper *bridge = [JsbBridgeWrapper sharedInstance];
+
+    [bridge addScriptEventListener:@"game.track"
+                          listener:^(NSString *arg) {
+#if GAME_HAS_FIREBASE
+                              GameTrack(GameParse(arg));
+#endif
+                          }];
+
+    [bridge addScriptEventListener:@"game.error"
+                          listener:^(NSString *arg) {
+#if GAME_HAS_FIREBASE
+                              GameScriptError(GameParse(arg));
+#endif
+                          }];
 
     [bridge addScriptEventListener:@"game.init"
                           listener:^(NSString *arg) {

@@ -21,6 +21,7 @@ __pycache__/
 .env
 *.pem
 google-services.json
+GoogleService-Info.plist
 
 # 本机工具留下的翻译中间文件，不进仓库
 i18n/*.translation

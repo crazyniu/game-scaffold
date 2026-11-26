@@ -102,7 +102,8 @@ android {
             renderscriptDebuggable false
             minifyEnabled true
             shrinkResources true
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // 用带 optimize 的默认配置：proguard-android.txt 里有 -dontoptimize，R8 只缩不优化，Play 管理中心会提示「请使用 R8 优化」（docs/06 第 4 节）
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             if (project.hasProperty("RELEASE_STORE_FILE")) {
                 signingConfig signingConfigs.release
             }
@@ -142,6 +143,10 @@ dependencies {
     implementation project(':libservice')
     implementation project(':libcocos')
     // 广告：AdMob + 用户同意（UMP），ads/on/.../GameAds.java 用
+    // 广告、统计 SDK 间接带进来的 androidx 版本太旧，Play 管理中心提示「SDK 版本已过时」，这里显式抬到新版（docs/06 第 4 节）。
+    // activity 1.13 要求 compileSdk 36、Android Gradle 插件 8.9.1 以上（现在是 36、8.10.1）
+    implementation 'androidx.activity:activity:1.13.0'
+    implementation 'androidx.fragment:fragment:1.9.1'
     if (GAME_ADS) {
         implementation 'com.google.android.gms:play-services-ads:23.6.0'
         implementation 'com.google.android.ump:user-messaging-platform:3.1.0'

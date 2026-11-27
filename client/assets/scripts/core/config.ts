@@ -288,9 +288,10 @@ export interface GameUiConfig {
   labTiers: { tray: number; window: number }[];
   /**
    * 演示：每步先圈出来停 ring 秒再点，点完隔 gap 秒。机器人代打每步停 pause[0]–pause[1] 秒（随机），
-   * 有 slowChance 的几率想久一点（slow[0]–slow[1] 秒），像真人在点
+   * 有 slowChance 的几率想久一点（slow[0]–slow[1] 秒），像真人在点；
+   * 录屏（./run.sh record，?fast=1）每步只停 fastPause[0]–fastPause[1] 秒、不想久，像熟手在点
    */
-  demo: { ring: number; gap: number; pause: [number, number]; slowChance: number; slow: [number, number] };
+  demo: { ring: number; gap: number; pause: [number, number]; slowChance: number; slow: [number, number]; fastPause: [number, number] };
   /** 限时关：剩几秒以内变色、跳动 */
   clock: { warn: number };
   /** 暂存槽：剩几格时变红闪；剩几格时提醒用道具（rescueSkills 里的发光，nudgeHand 第一个能用的放小手） */

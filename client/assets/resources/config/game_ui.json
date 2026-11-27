@@ -31,7 +31,8 @@
   "gap": 0.25,
   "pause": [0.6, 1.4],
   "slowChance": 0.12,
-  "slow": [1.6, 2.8]
+  "slow": [1.6, 2.8],
+  "fastPause": [0.2, 0.45]
  },
  "clock": {
   "warn": 15

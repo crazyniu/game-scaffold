@@ -27,3 +27,6 @@ GoogleService-Info.plist
 i18n/*.translation
 
 client/build-config/.android.local.json
+
+# ./run.sh record 录的视频
+/recordings/

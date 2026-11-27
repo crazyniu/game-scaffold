@@ -35,6 +35,11 @@ usage() {
   native-icons          从图标和背景生成各平台的应用图标、iOS 启动屏、商店图标（换了图标后在 Linux 上跑，结果要提交）
   editor                用 Cocos Creator 打开 client/
   clean                 清掉 Cocos 的缓存（client/library、temp、build、local），资源导入出错时用
+  record <关卡> [秒数] [语言] [slow] [ads] [serve]
+                        录视频（做广告素材）：构建后另开一个 Chrome（临时配置、新存档），从第 N 关起机器人代打，
+                        点得比平时快，录画面和游戏声音 [秒数]（默认 60）秒，存成 recordings/ 下的 1080×1920 mp4（不进仓库），
+                        录完自己关掉。语言写 es、ja、zh_TW 这样（默认 en）；slow = 按平时的速度点；ads = 出横幅和插屏
+                        （默认不出）；serve = 不重新构建。例：./run.sh record 12 60 es
   cdp logs [秒] | eval '<表达式>' | shot <图> | burst <目录> <张数> <间隔毫秒> '<JS>'
                         调试：读试玩浏览器的控制台、在页面里求值、截图、连拍
 
@@ -48,7 +53,7 @@ usage() {
   art-compress          包体压缩：PNG 调色板量化、背景音乐转 mp3（改了图后跑）
   font-subset           重新裁剪字体（需要 python3 与 fonttools、brotli）
 
-试玩、serve、editor 运行前会先拉当前分支的最新代码（git pull --ff-only；Mac 上先还原 client/ 下
+试玩、serve、record、editor 运行前会先拉当前分支的最新代码（git pull --ff-only；Mac 上先还原 client/ 下
 编辑器写的改动）。拉不下来只提示、用当前代码继续。
 
 环境变量：WEB_PORT（本地服务端口，默认 8080，被占时自动往后换；手动指定的被占就报错）、CDP_PORT（试玩 Chrome 的调试端口，默认 9333，被别的游戏占着就自动往后换并记下来，./run.sh cdp 自动连它）、COCOS_CREATOR（Cocos Creator 可执行文件的路径）、NO_PULL=1（不自动拉代码）
@@ -201,6 +206,60 @@ web_serve() {
   exec python3 -m http.server "$WEB_PORT" --bind 127.0.0.1 --directory "$dir"
 }
 
+# ./run.sh record：单独起一个服务和一个 Chrome（临时配置目录 = 新存档、不受平时试玩的设置影响），机器人代打录一段，
+# 录完关掉自己起的这两个进程、删掉临时配置（docs/10 第 9 节）。录屏脚本在 tools/record/rec.mjs
+REC_PIDS=()
+REC_PROF=""
+rec_cleanup() {
+  [ ${#REC_PIDS[@]} -gt 0 ] && { kill "${REC_PIDS[@]}" 2>/dev/null || true; wait "${REC_PIDS[@]}" 2>/dev/null || true; }
+  [ -n "$REC_PROF" ] && rm -rf "$REC_PROF"
+  return 0
+}
+record() {
+  local lv="" secs=60 lang=en fast=1 ads=0 build=1 a
+  for a in "$@"; do
+    case "$a" in
+      slow) fast=0 ;;
+      ads) ads=1 ;;
+      serve) build=0 ;;
+      *)
+        if [[ "$a" =~ ^[0-9]+$ ]]; then
+          if [ -z "$lv" ]; then lv="$a"; else secs="$a"; fi
+        elif [[ "$a" =~ ^[a-z]{2}(_[A-Z]{2})?$ ]]; then
+          lang="$a"
+        else
+          die "不认识的录屏参数：${a}（用法: ./run.sh record <关卡> [秒数] [语言] [slow] [ads] [serve]）"
+        fi ;;
+    esac
+  done
+  [ -n "$lv" ] || die "用法: ./run.sh record <关卡> [秒数] [语言] [slow] [ads] [serve]"
+  local chrome=/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome
+  [ -x "$chrome" ] || die "录屏要用 Mac 上的 Google Chrome"
+  [ "$build" = 1 ] && cocos_build web-mobile
+  local dir="$CLIENT/build/web-mobile" cdp=9360 out url
+  need_file "$dir/index.html" "去掉 serve 重新构建一次"
+  pick_web_port
+  while port_busy "$cdp" && [ "$cdp" -lt 9380 ]; do cdp=$((cdp + 1)); done
+  mkdir -p recordings
+  out="recordings/L${lv}_${lang}_$(date +%Y%m%d-%H%M%S)"
+  url="http://localhost:${WEB_PORT}/?autoplay=1&level=${lv}&lang=${lang}&ads=${ads}"
+  [ "$fast" = 1 ] && url="${url}&fast=1"
+  REC_PROF="$(mktemp -d "${TMPDIR:-/tmp}/fishsort-rec.XXXXXX")"
+  trap rec_cleanup EXIT
+  node tools/web/serve.mjs "$dir" "$WEB_PORT" 127.0.0.1 >/dev/null 2>&1 &
+  REC_PIDS+=($!)
+  # 声音不用点一下才响（--autoplay-policy）；窗口被挡住也照常跑（后三个参数）
+  "$chrome" --user-data-dir="$REC_PROF" --no-first-run --no-default-browser-check --remote-debugging-port="$cdp" \
+    --autoplay-policy=no-user-gesture-required --app=about:blank --window-size=450,832 \
+    --disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-background-timer-throttling >/dev/null 2>&1 &
+  REC_PIDS+=($!)
+  CDP_PORT="$cdp" URL="$url" SECS="$secs" OUT="$out" node tools/record/rec.mjs
+  # MediaRecorder 写的 mp4 没有时长索引，有的播放器、剪辑软件拖不动：有 ffmpeg 就原样转封装一遍（不重新压缩）
+  if [ -f "$out.mp4" ] && command -v ffmpeg >/dev/null 2>&1; then
+    ffmpeg -loglevel error -y -i "$out.mp4" -c copy -movflags +faststart "$out.fixed.mp4" && mv "$out.fixed.mp4" "$out.mp4"
+  fi
+}
+
 need_node_modules() {
   command -v node >/dev/null || die "找不到 node（需要 Node 22 以上）"
   [ -d client/node_modules ] || (cd client && npm ci)
@@ -252,7 +311,7 @@ case "$cmd" in
 esac
 
 case "$cmd" in
-  play|serve|editor)
+  play|serve|editor|record)
     if [ "${RUN_SH_PULLED:-}" != "1" ]; then
       pull_latest
       # 拉到了新代码：用新的 run.sh 重跑（run.sh 自己也可能改了）
@@ -269,6 +328,7 @@ case "$cmd" in
     web_serve "$@"
     ;;
   serve)        web_serve "$@" ;;
+  record)       record "$@" ;;
   native-apply) node tools/native/apply.mjs ;;
   native-icons) python3 tools/native/icons.py "$@" ;;
   editor)

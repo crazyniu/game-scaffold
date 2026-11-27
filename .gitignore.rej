@@ -1,0 +1,8 @@
+diff a/.gitignore b/.gitignore	(rejected hunks)
+@@ -40,3 +40,6 @@ difficulty_run.log
+ client/tools/level/route_report.csv
+ client/tools/level/route_report_daily.csv
+ client/build-config/.android.local.json
++
++# ./run.sh record 录的视频
++/recordings/

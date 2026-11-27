@@ -901,9 +901,10 @@ export class GamePage extends Page {
     }
   }
 
-  /** 机器人代打每步停多久：多数时候 pause 秒，偶尔想久一点（slow 秒），像真人在点 */
+  /** 机器人代打每步停多久：多数时候 pause 秒，偶尔想久一点（slow 秒），像真人在点。录屏（?fast=1）一律 fastPause 秒 */
   private humanPause(): number {
     const d = App.config.ui.demo;
+    if (App.flags.fast) return d.fastPause[0] + Math.random() * (d.fastPause[1] - d.fastPause[0]);
     const [a, b] = Math.random() < d.slowChance ? d.slow : d.pause;
     return a + Math.random() * (b - a);
   }

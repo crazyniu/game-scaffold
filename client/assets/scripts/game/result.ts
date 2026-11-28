@@ -9,7 +9,7 @@ import { buzz, sfx } from '../services/audio';
 import * as fx from '../ui/fx';
 import { tr } from '../ui/i18n';
 import { at, box, Btn, button, COLOR, fit, img, lazyImg, onTap, opacity, plate, setImg, slice, text, textWidth } from '../ui/kit';
-import { cardItem, prizeCell, watchAd } from '../ui/popups';
+import { cardItem, offerAd, prizeCell, watchAd } from '../ui/popups';
 import { Screen } from '../ui/screen';
 import { Page } from '../ui/shell';
 import * as Flow from './flow';
@@ -56,7 +56,7 @@ export class ResultPage extends Page {
     const top = Screen.top;
     // 从下往上排：底部给 Banner 留位（docs/01），最下面一行「主页」「分享」「翻倍」并排 → 下一关 → 奖励条 → 宝箱；
     // 横幅和星星贴顶（翻倍和主页放一行）
-    const hasDouble = r.rewarded && r.coins > 0 && App.platform.adsAvailable();
+    const hasDouble = r.rewarded && r.coins > 0 && offerAd('rv_double_coin');
     const homeY = Screen.bottom + BANNER_H + 64;
     const nextY = homeY + 140;
     const rowY = nextY + 175;

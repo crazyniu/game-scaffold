@@ -3,13 +3,16 @@
 // 两边实现同一组事件（下面 EV），参数和回复都是 JSON 字符串。
 //
 //   脚本 → 原生                         原生 → 脚本
-//   game.init    {ads: 广告位}             game.ads      {ready: 广告能播了没有, off: 这一版没有广告（没配广告位、包里没有 SDK）}
+//   game.init    {ads: 广告位}             game.ads      {ready: 激励视频能播了没有, started: 广告 SDK 起来了（插屏、横幅能请求）, off: 这一版没有广告（没配广告位、包里没有 SDK）,
+//                                                         consent: false = 用户没同意（或改成不同意），请求不了广告}
+//                                          game.consent  {privacy: 要不要「隐私选项」入口（UMP 说需要才给，欧洲等地）}
+//                                          game.adfail   {format: rewarded | interstitial | consent | consent_form, code: 错误码, msg}（拉广告失败，记埋点 ad_load_fail）
 //   game.rewarded {placement}              game.rewarded {result: done | skipped | unavailable}
 //   game.interstitial {placement}          game.interstitial {shown: 播出来了没有}（关掉了，或者没播成）
 //   game.banner  {show: true | false}
 //   game.vibrate {kind}
 //   game.share   {text}                    game.share    {ok}
-//   game.privacy {}（打开隐私选项：欧洲等地的广告同意设置）
+//   game.privacy {}（打开隐私选项：欧洲等地的广告同意设置）  game.privacy {ok: 表单打开了没有}（脚本这边不等它）
 //   game.track   {name, params}（统计事件，记进 Firebase Analytics；包里没有 Firebase 时原生直接丢掉）
 //   game.error   {message, stack}（脚本里没接住的错误，记进 Firebase Crashlytics；同上）
 import { native, sys } from 'cc';
@@ -21,6 +24,8 @@ const PREFIX = 'mygame.'; // 存档键前缀 = game.json 的 codeName + '.'（./
 const EV = {
   init: 'game.init',
   ads: 'game.ads',
+  adfail: 'game.adfail',
+  consent: 'game.consent',
   rewarded: 'game.rewarded',
   interstitial: 'game.interstitial',
   banner: 'game.banner',
@@ -36,13 +41,29 @@ const ERROR_MAX = 20;
 
 /** 等原生回复最多几秒：看一条激励视频连加载带播放不会超过这么久，超时按没看完算 */
 const AD_TIMEOUT = 120;
+/**
+ * 插屏等多久：原生没加载好时马上回「没播」；播出来以后丢了关闭回调，转场最多等这么久就照常往下走
+ * （和激励视频一样等 120 秒的话，结算后会卡两分钟）。插屏真的还在播也没关系：它盖在游戏上面
+ */
+const INTERSTITIAL_TIMEOUT = 45;
 
 export class PlatformNative extends PlatformBase {
   readonly id: string;
   private cfg: PlatformConfig | null = null;
+  /** 激励视频现在能播 */
   private ready = false;
+  /** 这次启动里广告 SDK 起来过（用户同意了）：插屏、横幅按它判断，不跟着激励视频此刻有没有加载好走 */
+  private started = false;
+  /** 广告请求资格已关闭（原生报了 consent: false，还没收到新的 started）：期间晚到的 ready 一律不算 */
+  private denied = false;
   /** 原生说这一版没有广告（game.json 关了广告、包里没有广告 SDK） */
   private off = false;
+  /** UMP 说这个用户要有「隐私选项」入口（欧洲等地）；没说之前不出入口 */
+  private privacyRequired = false;
+  /** 这一局已经记过的拉广告失败（种类 + 错误码）：失败会隔一阵重试，同一种只记一次 */
+  private failsLogged = new Set<string>();
+  /** 每种广告最近一次失败（广告测试页看，查「为什么没有广告」）：format → 「错误码 说明」 */
+  private lastFail = new Map<string, string>();
   private waiting = new Map<string, (arg: string) => void>();
   private errorsSent = new Set<string>();
 
@@ -64,9 +85,41 @@ export class PlatformNative extends PlatformBase {
     bridge.addNativeEventListener(EV.ads, (arg: string) => {
       const r = parse(arg);
       const was = this.ready;
-      this.ready = r.ready === true;
       if (r.off === true) this.off = true;
+      if (r.consent === false) {
+        // 没同意（或在隐私选项里改成不同意）：插屏、横幅也停，已显示的横幅收掉。之后只有新的 started（原生重新确认同意、SDK 启动）能恢复；
+        // 资格关闭前发出的加载请求晚到的 ready: true 不算
+        this.denied = true;
+        this.started = false;
+        this.ready = false;
+        native.jsbBridgeWrapper.dispatchEventToNative(EV.banner, JSON.stringify({ show: false }));
+      } else {
+        if (r.started === true) this.denied = false;
+        if (this.denied) this.ready = false;
+        else {
+          this.ready = r.ready === true;
+          // started：原生初始化完成时单独发，激励视频加载好也算
+          if (this.ready || r.started === true) this.started = true;
+        }
+      }
       if (was !== this.ready) this.onAdsChange();
+    });
+    bridge.addNativeEventListener(EV.consent, (arg: string) => {
+      const was = this.privacyRequired;
+      this.privacyRequired = parse(arg).privacy === true;
+      if (was !== this.privacyRequired) this.onAdsChange();
+    });
+    // 拉广告失败（「为什么没有广告」）：记一条埋点，同一种广告、同一个错误码这一局只记一次（失败后会隔 15 秒起加倍重试）
+    bridge.addNativeEventListener(EV.adfail, (arg: string) => {
+      const r = parse(arg);
+      const format = String(r.format ?? '');
+      const code = typeof r.code === 'number' ? r.code : -1;
+      this.lastFail.set(format, `${code} ${String(r.msg ?? '')}`.slice(0, 120));
+      const key = `${format}:${code}`;
+      if (this.failsLogged.has(key)) return;
+      this.failsLogged.add(key);
+      console.warn(`[ads] ${format} 拉取失败 ${code} ${String(r.msg ?? '')}`);
+      this.track('ad_load_fail', { format, code });
     });
     for (const ev of [EV.rewarded, EV.interstitial, EV.share]) {
       bridge.addNativeEventListener(ev, (arg: string) => {
@@ -112,13 +165,14 @@ export class PlatformNative extends PlatformBase {
   }
 
   override async showInterstitial(placement: string): Promise<boolean> {
-    if (!this.ready) return false;
-    const r = await this.ask(EV.interstitial, { placement }, AD_TIMEOUT);
+    // 插屏自己有没有加载好由原生判断（没有就马上回 shown: false）；不看激励视频此刻好没好
+    if (!this.started || this.off) return false;
+    const r = await this.ask(EV.interstitial, { placement }, INTERSTITIAL_TIMEOUT);
     return r.shown === true;
   }
 
   override showBanner(_placement: string): void {
-    if (this.ready) native.jsbBridgeWrapper.dispatchEventToNative(EV.banner, JSON.stringify({ show: true }));
+    if (this.started && !this.off) native.jsbBridgeWrapper.dispatchEventToNative(EV.banner, JSON.stringify({ show: true }));
   }
 
   override hideBanner(): void {
@@ -168,11 +222,25 @@ export class PlatformNative extends PlatformBase {
   }
 
   override hasCapability(cap: Capability): boolean {
-    // 隐私选项是广告的同意设置，没有广告就不要
-    if (cap === 'ads' || cap === 'privacy_options') return this.hasAds();
+    if (cap === 'ads') return this.hasAds();
+    // 隐私选项入口：有广告、而且 UMP 说这个用户需要（欧洲等地）才出；有广告就出的话，台湾等地的玩家看到一个点了没反应的按钮
+    if (cap === 'privacy_options') return this.hasAds() && this.privacyRequired;
+    // 广告测试页：入口只在测试模式里出（devtools/testMode.ts），上架包也能看原生广告状态
+    if (cap === 'ad_test') return this.hasAds();
     // 隐私政策和有没有广告无关，一直要有（苹果 5.1.1、Google Play 用户数据政策）
     if (cap === 'privacy_policy') return !!this.cfg?.privacyPolicy;
     return cap === 'share' || cap === 'vibrate';
+  }
+
+  override adStatus(): string[] {
+    const unit = this.cfg ? adUnits(this.cfg, this.id).rewarded : '';
+    const lines = [
+      `SDK ${this.started ? '已启动' : '未启动'} · 同意 ${this.denied ? '拿不到（consent:false）' : '正常'} · 激励视频 ${this.ready ? '已拉到' : '没拉到'}`,
+      `激励视频广告位 ${unit.includes('3940256099942544') ? '（Google 测试位）' : ''}${unit || '（没配）'}`,
+    ];
+    if (this.lastFail.size === 0) lines.push('还没有失败记录');
+    for (const [f, m] of this.lastFail) lines.push(`${f} 失败：${m}`);
+    return lines;
   }
 
   private hasAds(): boolean {

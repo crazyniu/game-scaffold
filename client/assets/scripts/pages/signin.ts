@@ -10,7 +10,7 @@ import * as fx from '../ui/fx';
 import { tr } from '../ui/i18n';
 import { at, button, fmt, img, slice, text } from '../ui/kit';
 import { openPopup } from '../ui/popup';
-import { PrizeItem, cardItem, rewardPopup, watchAd } from '../ui/popups';
+import { PrizeItem, cardItem, offerAd, rewardPopup, watchAd } from '../ui/popups';
 
 const rng = new Rng(Date.now() >>> 0);
 
@@ -66,9 +66,10 @@ export function signInPopup(changed: () => void): void {
   });
   // 这一版没有广告时没有「看广告领双倍」
   // 拉不到广告时只有「领取」，不出看广告翻倍
-  const hasAds = App.platform.hasCapability('ads') && App.platform.adsAvailable();
+  const hasAds = offerAd('rv_signin_double');
   const claim = (doubled: boolean) => {
-    const r = SignIn.claim(s, eco, App.config.cards, rng, today(), now(), doubled);
+    const day = today();
+    const r = SignIn.claim(s, eco, App.config.cards, rng, day, now(), doubled);
     if (!r) return;
     App.save.write();
     p.close();
@@ -82,7 +83,8 @@ export function signInPopup(changed: () => void): void {
             label: tr('UI_CLAIM_DOUBLE'),
             onTap: async () => {
               if (!(await watchAd('rv_signin_double'))) return;
-              const d = SignIn.doubleToday(s, eco, App.config.cards, rng, today(), now(), r);
+              // 日期用领取那一刻的：广告跨零点播完，翻倍还是记在这条签到上（重新读日期会被当成「次日可领」拒掉，看了广告没奖励）
+              const d = SignIn.doubleToday(s, eco, App.config.cards, rng, day, now(), r);
               App.save.write();
               changed();
               if (d) rewardPopup(items(d), { onClose: changed });

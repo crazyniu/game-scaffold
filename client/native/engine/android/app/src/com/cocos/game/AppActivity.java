@@ -28,6 +28,8 @@ import android.os.Bundle;
 import android.content.Intent;
 import android.content.res.Configuration;
 
+import androidx.core.view.WindowCompat;
+
 import com.cocos.service.SDKWrapper;
 import com.cocos.lib.CocosActivity;
 
@@ -36,6 +38,10 @@ public class AppActivity extends CocosActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // 无边框（edge-to-edge）：画面铺到状态栏、导航栏后面，游戏按安全区自己让开。
+        // Android 15 起 target 35 以上本来就强制这样；这里让更早的系统也一样，Play 管理中心「系统可能不会面向所有用户显示无边框画面」要的就是它。
+        // Cocos 的 GameActivity 继承的是系统 Activity，用不了 androidx 的 EdgeToEdge.enable()（要 ComponentActivity），用等效的 WindowCompat
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         // DO OTHER INITIALIZATION BELOW
         SDKWrapper.shared().init(this);
         // 脚本和原生之间的桥：广告、统计和崩溃报告、震动、分享（GameBridge.java）

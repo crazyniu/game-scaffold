@@ -318,6 +318,8 @@ export class Shell {
       return;
     }
     closeAllPopups();
+    // 进了哪一页（Firebase 的屏幕浏览报告，docs/05 第 7 节）；同一页刷新不记
+    App.platform.track('screen_view', { screen_name: name, screen_class: name });
     if (prev) {
       prev.page.hide();
       prev.page.node.active = false;

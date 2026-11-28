@@ -214,7 +214,14 @@ if (existsSync(android)) {
   edit(join(android, 'app/AndroidManifest.xml'), (s) =>
     s
       .replace(/(android:name="com\.google\.android\.gms\.ads\.APPLICATION_ID"\s*android:value=")[^"]*(")/, `$1${game.android.admobAppId}$2`)
-      .replace(AD_ID, `<uses-permission android:name="com.google.android.gms.permission.AD_ID"${adsOn ? '' : ' tools:node="remove"'}/>`),
+      .replace(AD_ID, `<uses-permission android:name="com.google.android.gms.permission.AD_ID"${adsOn ? '' : ' tools:node="remove"'}/>`)
+      // AdMob 的全屏广告页换了铺进刘海的主题；关掉广告时没有广告 SDK、也就没有这个类，整个声明去掉
+      .replace(
+        /<activity\s+android:name="com\.google\.android\.gms\.ads\.AdActivity"[^>]*\/>/,
+        adsOn
+          ? '<activity\n            android:name="com.google.android.gms.ads.AdActivity"\n            android:theme="@style/GameAdTheme"\n            tools:replace="android:theme"/>'
+          : '<activity\n            android:name="com.google.android.gms.ads.AdActivity"\n            tools:node="remove"/>',
+      ),
   );
   const label = (s, name) => s.replace(/(<string name="game_app_name">)[^<]*(<\/string>)/, `$1${xml(name)}$2`);
   edit(join(android, 'res/values/strings.xml'), (s) => label(s, game.name.en));

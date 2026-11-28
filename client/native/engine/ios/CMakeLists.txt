@@ -30,15 +30,18 @@ cc_ios_after_target(${EXECUTABLE_NAME})
 # 各语言的应用名（<语言>.lproj/InfoPlist.strings，tools/native/apply.mjs 按 game.json 生成）。
 # Cocos 的模板只把 Base.lproj 里的启动屏和 Localizable.strings 打进包；列进资源表又会被摊平到包根目录、同名文件互相覆盖，
 # 所以构建完（签名之前）按目录拷进 .app。GAME_LPROJ 由 apply.mjs 改写
+# 构建完往 .app 里拷东西一律走 game_copy_into_app：拷到 Xcode 正在打的那个 App（copy-into-app.sh）。
+# 不能直接拷到 $<TARGET_BUNDLE_DIR>：归档（IPA）时 App 不在那里，归档里就缺文件（fishsort 1.0.0（4）因此缺 Firebase 配置、启动即崩）
+function(game_copy_into_app src rel)
+    add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
+        COMMAND /bin/sh "${CC_PROJECT_DIR}/copy-into-app.sh" "$<TARGET_BUNDLE_DIR:${EXECUTABLE_NAME}>" "${src}" "${rel}")
+endfunction()
 set(GAME_LPROJ Base en zh-Hans zh-Hant ja ko de fr es pt-BR it ru tr)
 foreach(d ${GAME_LPROJ})
-    add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_DIR:${EXECUTABLE_NAME}>/${d}.lproj"
-        COMMAND ${CMAKE_COMMAND} -E copy "${CC_PROJECT_DIR}/${d}.lproj/InfoPlist.strings" "$<TARGET_BUNDLE_DIR:${EXECUTABLE_NAME}>/${d}.lproj/InfoPlist.strings")
+    game_copy_into_app("${CC_PROJECT_DIR}/${d}.lproj/InfoPlist.strings" "${d}.lproj/InfoPlist.strings")
 endforeach()
 # 隐私清单（App Store 要求：用到 UserDefaults、文件时间、开机时间这几类 API 要写明理由）：同样构建完拷进 .app 根目录
-add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy "${CC_PROJECT_DIR}/PrivacyInfo.xcprivacy" "$<TARGET_BUNDLE_DIR:${EXECUTABLE_NAME}>/PrivacyInfo.xcprivacy")
+game_copy_into_app("${CC_PROJECT_DIR}/PrivacyInfo.xcprivacy" "PrivacyInfo.xcprivacy")
 
 # Xcode 27 的 libc++ 不许特化 std::is_floating_point 等（引擎带的 enoki/half.h 这么做了），这条诊断默认是错误，降成警告
 foreach(t cocos_engine ${EXECUTABLE_NAME})
@@ -94,14 +97,12 @@ if(GAME_FIREBASE AND EXISTS ${GAME_FIREBASE_DIR}/FirebaseCore.xcframework AND EX
         file(GLOB GAME_PRIVACY_BUNDLES LIST_DIRECTORIES true "${GAME_FIREBASE_DIR}/${fw}.xcframework/ios-arm64/*.framework/*_Privacy.bundle")
         foreach(b ${GAME_PRIVACY_BUNDLES})
             get_filename_component(bn ${b} NAME)
-            add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_directory "${b}" "$<TARGET_BUNDLE_DIR:${EXECUTABLE_NAME}>/${bn}")
+            game_copy_into_app("${b}" "${bn}")
         endforeach()
     endforeach()
     list(APPEND GAME_LINK "-lc++" "-lsqlite3" "-lz")
     # Firebase 启动时读包里的 GoogleService-Info.plist（apply.mjs 从仓库根目录的 firebase/ 拷过来）
-    add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy "${CC_PROJECT_DIR}/GoogleService-Info.plist" "$<TARGET_BUNDLE_DIR:${EXECUTABLE_NAME}>/GoogleService-Info.plist")
+    game_copy_into_app("${CC_PROJECT_DIR}/GoogleService-Info.plist" "GoogleService-Info.plist")
     # 崩溃堆栈要 dSYM 才看得懂：Cocos 的 Release 配置不带调试信息（GCC_GENERATE_DEBUGGING_SYMBOLS = NO），引擎和游戏都打开，
     # 上架包（Release）生成 dSYM，./package.sh 打完 IPA 传给 Crashlytics。调试信息只进 dSYM，装进手机的包照样去掉符号
     foreach(t cocos_engine ${EXECUTABLE_NAME})

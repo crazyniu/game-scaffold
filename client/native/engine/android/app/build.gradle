@@ -136,6 +136,27 @@ android {
     }
 }
 
+// Cocos 引擎库 libcocos 自带的 consumer 规则（Cocos 安装目录 libcocos2dx/proguard-rules.pro）整包保留
+// com.google.**、com.android.**、androidx.** 等：AdMob、Firebase、Play 服务、androidx 全都原样留着，R8 对它们不缩不优化，
+// Play 管理中心一直提示「请使用 R8 优化」（只改我们自己的 proguard-rules.pro 不够，fishsort 1.0.4(6) 量过 dex 大小没变）。
+// Cocos 安装目录不归我们改，Android Gradle 插件 8 也没有按依赖过滤库规则的开关，
+// 所以等 libcocos 导出完规则再把这几行删掉（各 SDK 自带规则；引擎 C++ 经 JNI 按名字找的类在 proguard-rules.pro 里单独保留）。
+// ./package.sh 打 AAB 后会查合并后的配置里还有没有整包保留（docs/06）
+def GAME_BROAD_KEEP = ~/(?m)^-keep public class (com\.google|com\.android|google\.billing|google\.play|androidx)\.\*\* \{ \*; \}[ \t]*$/
+gradle.projectsEvaluated {
+    def lib = rootProject.findProject(':libcocos')
+    if (lib == null) return
+    lib.tasks.matching { it.name ==~ /export\w*ConsumerProguardFiles/ }.configureEach { t ->
+        t.doLast {
+            t.outputs.files.asFileTree.each { f ->
+                def text = f.text
+                def stripped = text.replaceAll(GAME_BROAD_KEEP, '# （整包保留已由 app/build.gradle 删掉）')
+                if (stripped != text) f.text = stripped
+            }
+        }
+    }
+}
+
 dependencies {
     implementation fileTree(dir: '../libs', include: ['*.jar','*.aar'])
     implementation fileTree(dir: 'libs', include: ['*.jar','*.aar'])

@@ -1,4 +1,6 @@
 <resources>
     <!-- 全屏竖屏；刘海屏的适配在 values-v28 -->
     <style name="GameGameTheme" parent="@android:style/Theme.NoTitleBar.Fullscreen" />
+    <!-- AdMob 全屏广告页（AndroidManifest.xml 的 AdActivity）：和 SDK 自带的一样是 Theme.Translucent；刘海屏的适配在 values-v28 -->
+    <style name="GameAdTheme" parent="@android:style/Theme.Translucent" />
 </resources>

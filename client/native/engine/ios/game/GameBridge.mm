@@ -70,6 +70,7 @@ static UIViewController *GameRootViewController(void) {
 // 上架前和刚上架时填充很低、断网时也会失败，不重试的话这一局入口一直是灰的
 @property(nonatomic, assign) NSTimeInterval rewardedRetry;
 @property(nonatomic, assign) NSTimeInterval interstitialRetry;
+@property(nonatomic, assign) NSTimeInterval consentRetry;
 @property(nonatomic, assign) BOOL rewardedLoading;
 @property(nonatomic, assign) BOOL interstitialLoading;
 @end
@@ -96,12 +97,28 @@ static const NSTimeInterval GAME_RETRY_MAX = 300;
         GameSend(@"game.ads", @{@"ready" : @NO, @"off" : @YES});
         return;
     }
+    [self askConsent];
+}
+
+- (void)askConsent {
     UMPRequestParameters *params = [[UMPRequestParameters alloc] init];
     [UMPConsentInformation.sharedInstance
         requestConsentInfoUpdateWithParameters:params
                              completionHandler:^(NSError *_Nullable error) {
+                                 if (error) [self reportFail:@"consent" error:error];
+                                 // 问同意本身失败了（第一次打开时连不上 Google 等）：同意状态停在「未知」、请求不了广告。
+                                 // 不再问的话这一局广告入口一直是灰的，要杀掉重开；隔一会儿再问，间隔和拉广告失败的重试一样
+                                 if (error && !UMPConsentInformation.sharedInstance.canRequestAds) {
+                                     NSTimeInterval wait = MAX(self.consentRetry, GAME_RETRY_FIRST);
+                                     self.consentRetry = MIN(GAME_RETRY_MAX, wait * 2);
+                                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(wait * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [self askConsent]; });
+                                 } else if (!error) {
+                                     self.consentRetry = GAME_RETRY_FIRST;
+                                 }
                                  [UMPConsentForm loadAndPresentIfRequiredFromViewController:GameRootViewController()
                                                                           completionHandler:^(NSError *_Nullable formError) {
+                                                                              if (formError) [self reportFail:@"consent_form" error:formError];
+                                                                              [self sendConsent];
                                                                               [self askTrackingThenStart];
                                                                           }];
                              }];
@@ -119,18 +136,28 @@ static const NSTimeInterval GAME_RETRY_MAX = 300;
 
 - (void)startSdk {
     if (!UMPConsentInformation.sharedInstance.canRequestAds) {
-        GameSend(@"game.ads", @{@"ready" : @NO});
+        // consent:false 让脚本那头插屏、横幅也停，之前发出的加载请求晚到的 ready 也不算（fishsort #215）
+        GameSend(@"game.ads", @{@"ready" : @NO, @"consent" : @NO});
         return;
     }
     [GADMobileAds.sharedInstance startWithCompletionHandler:^(GADInitializationStatus *status) {
+        // SDK 起来了：插屏、横幅从这时起就能请求，不用等激励视频加载好（激励一直拉不到时插屏、横幅原来也被挡着）
+        GameSend(@"game.ads", @{@"ready" : @NO, @"started" : @YES});
         [self loadRewarded];
         [self loadInterstitial];
     }];
 }
 
+/** 拉广告失败：告诉脚本是哪种广告、错误码，脚本记一条埋点（ad_load_fail）；format 还有 consent、consent_form */
+- (void)reportFail:(NSString *)format error:(NSError *)error {
+    GameSend(@"game.adfail", @{@"format" : format, @"code" : @(error.code), @"msg" : error.localizedDescription ?: @""});
+}
+
 - (void)loadRewarded {
     // 已经有一条或正在加载就不重复请求（点了入口、到点重试可能同时触发）
     if (self.rewardedUnit.length == 0 || self.rewarded || self.rewardedLoading) return;
+    // 同意被收回后，排队的重试不再发请求（fishsort #215）
+    if (!UMPConsentInformation.sharedInstance.canRequestAds) return;
     self.rewardedLoading = YES;
     [GADRewardedAd loadWithAdUnitID:self.rewardedUnit
                             request:[GADRequest request]
@@ -142,6 +169,7 @@ static const NSTimeInterval GAME_RETRY_MAX = 300;
                       if (self.rewarded) {
                           self.rewardedRetry = GAME_RETRY_FIRST;
                       } else {
+                          if (error) [self reportFail:@"rewarded" error:error];
                           NSTimeInterval wait = MAX(self.rewardedRetry, GAME_RETRY_FIRST);
                           self.rewardedRetry = MIN(GAME_RETRY_MAX, wait * 2);
                           dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(wait * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [self loadRewarded]; });
@@ -151,6 +179,7 @@ static const NSTimeInterval GAME_RETRY_MAX = 300;
 
 - (void)loadInterstitial {
     if (self.interstitialUnit.length == 0 || self.interstitial || self.interstitialLoading) return;
+    if (!UMPConsentInformation.sharedInstance.canRequestAds) return;
     self.interstitialLoading = YES;
     [GADInterstitialAd loadWithAdUnitID:self.interstitialUnit
                                 request:[GADRequest request]
@@ -161,6 +190,7 @@ static const NSTimeInterval GAME_RETRY_MAX = 300;
                           if (self.interstitial) {
                               self.interstitialRetry = GAME_RETRY_FIRST;
                           } else {
+                              if (error) [self reportFail:@"interstitial" error:error];
                               NSTimeInterval wait = MAX(self.interstitialRetry, GAME_RETRY_FIRST);
                               self.interstitialRetry = MIN(GAME_RETRY_MAX, wait * 2);
                               dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(wait * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [self loadInterstitial]; });
@@ -210,9 +240,17 @@ static const NSTimeInterval GAME_RETRY_MAX = 300;
 - (void)openPrivacyOptions {
     [UMPConsentForm presentPrivacyOptionsFormFromViewController:GameRootViewController()
                                               completionHandler:^(NSError *_Nullable error) {
-                                                  // 改完同意重新判断：原来不同意、现在同意了就初始化并拉广告
+                                                  // 表单打不开（没网、这个地区不需要）回给脚本提示；改完同意重新判断：原来不同意、现在同意了就初始化并拉广告
+                                                  GameSend(@"game.privacy", @{@"ok" : @(error == nil)});
+                                                  [self sendConsent];
                                                   [self startSdk];
                                               }];
+}
+
+/** game.consent：这个用户要不要「隐私选项」入口（UMP 说需要才给，欧洲等地） */
+- (void)sendConsent {
+    BOOL required = UMPConsentInformation.sharedInstance.privacyOptionsRequirementStatus == UMPPrivacyOptionsRequirementStatusRequired;
+    GameSend(@"game.consent", @{@"privacy" : @(required)});
 }
 
 #pragma mark GADFullScreenContentDelegate

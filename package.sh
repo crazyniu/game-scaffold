@@ -211,6 +211,7 @@ ios_build() {
       xcodebuild -project "$proj" -scheme "$scheme" -sdk iphoneos -configuration Release \
         -archivePath "$out/app.xcarchive" DEVELOPMENT_TEAM="$team" -allowProvisioningUpdates archive > "$out/archive.log" 2>&1 \
         || { grep -E "error:|ARCHIVE FAILED" "$out/archive.log" | head -30; die "归档失败（全文 client/build/ios/release/archive.log）"; }
+      ios_check_archive "$out/app.xcarchive"
       cat > "$out/ExportOptions.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -242,6 +243,22 @@ ios_upload_dsyms() {
   "$tool" -gsp "$plist" -p ios "$archive/dSYMs" > "$CLIENT/build/ios/release/dsym.log" 2>&1 \
     && echo "✓ dSYM 已传给 Crashlytics" \
     || echo "! dSYM 没传上（全文 client/build/ios/release/dsym.log）；之后补传：${tool} -gsp ${plist} -p ios ${archive}/dSYMs"
+}
+
+# 归档里的 App 要带齐构建完才拷进去的文件（CMakeLists 的 game_copy_into_app）。原来这些文件只拷到了普通构建的目录，
+# 归档里没有，装手机测不出来（fishsort 1.0.0（4）缺 GoogleService-Info.plist、Firebase 一启动就崩，被 App Store 拒，2026-11-27）
+ios_check_archive() {
+  local app f missing=""
+  app="$(ls -d "$1"/Products/Applications/*.app 2>/dev/null | head -1)"
+  [ -n "$app" ] || die "归档里没找到 App（$1/Products/Applications/）"
+  for f in PrivacyInfo.xcprivacy en.lproj/InfoPlist.strings; do
+    [ -e "$app/$f" ] || missing="$missing $f"
+  done
+  if [ -d "$CLIENT/native/engine/ios/sdk/firebase/FirebaseAnalytics.xcframework" ] && [ -f "$CLIENT/native/engine/ios/GoogleService-Info.plist" ]; then
+    [ -e "$app/GoogleService-Info.plist" ] || missing="$missing GoogleService-Info.plist"
+  fi
+  [ -z "$missing" ] || die "归档里的 App 缺这些文件：${missing}（CMakeLists 的 game_copy_into_app 没拷进去），这样的包传上去会被拒"
+  echo "✓ 归档里的 App 带齐了隐私清单、各语言应用名$([ -e "$app/GoogleService-Info.plist" ] && echo '、Firebase 配置')"
 }
 
 # 把上一次「4 IPA」打好的归档传到 App Store Connect：用 Xcode 里登录的开发者账号（Xcode → Settings → Accounts），不另要密码。
@@ -381,13 +398,17 @@ android_build() {
   NDK_ROOT="$ndk" ANDROID_SDK_ROOT="$sdk" ANDROID_HOME="$sdk" COCOS_BUILD_CONFIG="$cfg" cocos_build android
   proj="$CLIENT/build/android/proj"
   [ -x "$proj/gradlew" ] || die "没找到 Gradle 工程：$proj"
-  # 最低 Android 版本按 game.json 的 android.minSdk 写进 Gradle 工程（Cocos 生成的不跟它走； 在 Mac 上打 AAB 时补的）
+  # 最低 Android 版本按 game.json 的 android.minSdk 写进 Gradle 工程（Cocos 生成的不跟它走； 在 Mac 上打 AAB 时补的）；再打开优化型资源缩减
   node -e '
     const fs = require("node:fs");
     const props = process.argv[1];
     const minSdk = require("./game.json").android.minSdk;
     const content = fs.readFileSync(props, "utf8");
-    fs.writeFileSync(props, content.replace(/^PROP_MIN_SDK_VERSION=.*$/m, `PROP_MIN_SDK_VERSION=${minSdk}`));
+    let out = content.replace(/^PROP_MIN_SDK_VERSION=.*$/m, `PROP_MIN_SDK_VERSION=${minSdk}`);
+    // 优化型资源缩减（R8 连同代码一起判断哪些资源用不到；Android Gradle 插件 9 起默认打开）：
+    // Play 管理中心「请使用 R8 优化」的一项（docs/06 第 4 节）。Cocos 生成的工程没有，这里补上；AGP 8.10 认的名字是 android.r8.optimizedShrinking
+    if (!/^android\.r8\.optimizedShrinking=/m.test(out)) out = out.trimEnd() + "\nandroid.r8.optimizedShrinking=true\n";
+    fs.writeFileSync(props, out);
   ' "$proj/gradle.properties"
   case "$mode" in
     project) echo "Gradle 工程：$proj" ;;
@@ -400,6 +421,13 @@ android_build() {
       [ -n "$aab" ] || die "没找到打好的 AAB"
       "$(find_keytool)" -printcert -rfc -jarfile "$aab" 2>/dev/null | grep -q -- '-----BEGIN CERTIFICATE-----' || die "${aab} 没有签名（检查 ~/.gradle/gradle.properties 的 RELEASE_ 变量）"
       android_check_16k "$aab" "$ndk" || die "16 KB 内存页检查没过，这个 AAB 不要传（${aab}）"
+      # R8 不能整包保留第三方库（Play 管理中心会提示「请使用 R8 优化」，docs/06 第 4 节）：查合并后的规则
+      local r8cfg broad
+      r8cfg="$(find "$proj/build" -path '*/outputs/mapping/release/configuration.txt' | head -1)"
+      [ -n "$r8cfg" ] || die "没找到 R8 合并后的规则（outputs/mapping/release/configuration.txt）"
+      broad="$(grep -E '^-keep[a-z,]* (public )?class (com\.google|com\.android|androidx|google\.[a-z]+)\.\*\* *\{' "$r8cfg" || true)"
+      [ -z "$broad" ] || die "R8 规则里还有整包保留，这个 AAB 不要传：${broad}"
+      echo "✓ R8：没有整包保留 Google / androidx 库的规则"
       # 带 Firebase 时：把引擎带符号的 .so 传给 Crashlytics（C++ 崩溃堆栈才看得懂；Java 的混淆表 bundleRelease 已经自动传了）
       if grep -q '^def GAME_FIREBASE = true' "$CLIENT/native/engine/android/app/build.gradle"; then
         (cd "$proj" && ./gradlew uploadCrashlyticsSymbolFileRelease) \

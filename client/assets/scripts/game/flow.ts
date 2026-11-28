@@ -23,8 +23,9 @@ import * as fx from '../ui/fx';
 import { tr } from '../ui/i18n';
 import { COLOR, at, button, img, text } from '../ui/kit';
 import { closeAllPopups, openPopup, popupCount } from '../ui/popup';
-import { confirmLeave, giftPopup, livesPopup, revealCards, settingsPopup, skillName, spend, watchAd } from '../ui/popups';
+import { confirmLeave, giftPopup, livesPopup, offerAd, revealCards, settingsPopup, skillName, spend, watchAd } from '../ui/popups';
 import { ui } from '../ui/shell';
+import * as TestMode from '../devtools/testMode';
 import type { GamePage } from './gameView';
 import { levelKind } from './levelKind';
 
@@ -237,7 +238,7 @@ export function useSkill(g: GamePage, id: string): void {
 function buySkill(g: GamePage, id: string): void {
   const eco = App.config.eco;
   // 看广告的那一行：这一版有广告、而且现在拉到了才有；拉不到整行不出现、弹窗矮一截
-  const hasAds = App.platform.hasCapability('ads') && App.platform.adsAvailable();
+  const hasAds = offerAd('rv_tool');
   const dy = hasAds ? 0 : -55;
   const name = skillName(id);
   const p = openPopup({ w: 600, h: hasAds ? 560 : 450, title: tr('SKILL_BUY_TITLE', name), mascot: null });
@@ -354,9 +355,10 @@ function endRun(g: GamePage, result: 'win' | 'lose' | 'quit'): void {
   // 每日任务：输了、中途离开也算；一局只记一次
   if (g.tallied) return;
   g.tallied = true;
-  // 统计（Firebase Analytics 推荐的 level_end，success 记成 1 / 0）；机器人代打不记
-  if (!App.flags.autoplay) {
-    App.platform.track('level_end', { level_name: String(g.arg.level), level: g.arg.level, success: result === 'win', result, daily: !!g.arg.daily, moved: g.moved });
+  // 统计（Firebase Analytics 推荐的 level_end，success 记成 1 / 0）；机器人代打、测试模式不记。
+  // seconds：这局玩了几秒（局内时钟）；coins：这时手里的金币（过关奖励还没发）
+  if (!App.flags.autoplay && !TestMode.isOn()) {
+    App.platform.track('level_end', { level_name: String(g.arg.level), level: g.arg.level, success: result === 'win', result, daily: !!g.arg.daily, moved: g.moved, seconds: Math.round(g.clock), coins: s.coins });
   }
   const eco = App.config.eco;
   // 玩法：每日任务的计数（任务 id 在 economy.json 的 tasks.pool）
@@ -411,7 +413,7 @@ export function lose(g: GamePage): void {
     return;
   }
   // 每关一次复活（看广告）；没有广告直接失败
-  if (!g.s.revived && App.platform.adsAvailable()) revivePopup(g);
+  if (!g.s.revived && offerAd('rv_revive')) revivePopup(g);
   else failPopup(g);
 }
 
@@ -611,6 +613,8 @@ export async function afterResult(d: WinData, next: boolean): Promise<void> {
       } finally {
         ui.busy(false);
       }
+      // 到了该弹的时候弹没弹出来（没拉到广告时 shown 为 0），docs/05 第 7 节
+      if (!TestMode.isOn()) App.platform.track('ad_interstitial', { level_name: String(d.level), shown: shown ? 1 : 0 });
       if (shown) {
         Meta.markInterstitial(s, d.level, adNow());
         App.save.write();

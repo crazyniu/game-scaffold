@@ -12,7 +12,7 @@ import * as Flow from '../game/flow';
 import * as fx from '../ui/fx';
 import { tr } from '../ui/i18n';
 import { COLOR, at, box, button, fmt, hex, img, lazyImg, opacity, setImg, slice, text, tint } from '../ui/kit';
-import { needCoins, prizeCell, prizeItems, revealCards, rewardPopup, watchAd } from '../ui/popups';
+import { needCoins, offerAd, prizeCell, prizeItems, revealCards, rewardPopup, watchAd } from '../ui/popups';
 import { Screen } from '../ui/screen';
 import { HEAD_BOTTOM, PAGE_BOTTOM, Page, pageHead, ui } from '../ui/shell';
 
@@ -70,7 +70,7 @@ export class DailyPage extends Page {
     // （原来进度条和宝箱各自浮在背景上，和任务中心不是一个样子）
     const btnY = Screen.bottom + PAGE_BOTTOM + 40 + 64;
     // 这一版没有广告、或者现在拉不到广告时，再试一次只能用金币，看广告的按钮不出现
-    const hasAds = App.platform.hasCapability('ads') && App.platform.adsAvailable();
+    const hasAds = offerAd('rv_daily_retry');
     const hint = text(v, won ? tr('DAILY_TOMORROW') : free ? tr('DAILY_FREE') : tr(hasAds ? 'DAILY_RETRY_HINT' : 'DAILY_RETRY_HINT_COINS'), 30);
     at(hint.node, 0, btnY + 64 + 40);
     const PANEL_H = 400;

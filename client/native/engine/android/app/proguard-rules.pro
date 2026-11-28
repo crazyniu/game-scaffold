@@ -35,7 +35,14 @@
 -keep public class android.net.http.SslError
 -keep public class android.webkit.WebViewClient
 
--keep public class com.google.** { *; }
+# 不要整包保留 com.google.**（AdMob、UMP、Firebase、Play 服务）：那样 R8 对它们既不删也不优化，Play 管理中心一直提示「请使用 R8 优化」。
+# 这些库的 AAR 自带混淆规则（consumer proguard rules），不用再手写。
+# Cocos 引擎库自带的整包保留（com.google.**、androidx.** 等）在 app/build.gradle 里删掉了，
+# 只保留引擎 C++ 经 JNI 按名字调用的游戏 SDK（GameActivity、Swappy、手柄）和 GameActivity 取窗口边距用的两个 androidx 类
+-keep class com.google.androidgamesdk.** { *; }
+-keep class com.google.android.games.paddleboat.** { *; }
+-keep class androidx.core.view.WindowInsetsCompat$Type { *; }
+-keep class androidx.core.graphics.Insets { *; }
 
 -dontwarn android.webkit.WebView
 -dontwarn android.net.http.SslError

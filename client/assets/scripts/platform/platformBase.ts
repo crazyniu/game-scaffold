@@ -98,6 +98,11 @@ export abstract class PlatformBase {
 
   track(_event: string, _params: Record<string, unknown> = {}): void {}
 
+  /** 原生广告现在的状态（SDK、同意、拉没拉到、最近的失败错误码），广告测试页显示；没有就空 */
+  adStatus(): string[] {
+    return [];
+  }
+
   /** 打开广告的隐私选项（欧洲等地的同意设置）；hasCapability('privacy_options') 时设置里才有入口 */
   openPrivacyOptions(): void {}
 

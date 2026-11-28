@@ -25,9 +25,21 @@ import * as TestMode from '../devtools/testMode';
 
 // ---------------------------------------------------------------- 看广告
 
+/**
+ * 这里该不该出看广告的入口（这一版有广告、现在也拉到了）。顺手记一笔 ad_offer（placement、available 1 / 0）：
+ * 拉不到广告时入口不出现（docs/01），不记就看不出玩家有多少次本来可以看却没给（docs/05 第 7 节）
+ */
+export function offerAd(placement: string): boolean {
+  if (!App.platform.hasCapability('ads')) return false;
+  const on = App.platform.adsAvailable();
+  App.platform.track('ad_offer', { placement, available: on ? 1 : 0 });
+  return on;
+}
+
 /** 看激励视频。看完返回 true；没看完、不可用返回 false（不可用时提示，docs/01） */
 export async function watchAd(placement: string): Promise<boolean> {
   if (!App.platform.adsAvailable()) {
+    App.platform.track('ad_rewarded_result', { placement, result: 'unavailable' });
     ui.toast(tr('UI_AD_UNAVAILABLE'));
     return false;
   }
@@ -41,6 +53,7 @@ export async function watchAd(placement: string): Promise<boolean> {
   } finally {
     ui.busy(false);
   }
+  App.platform.track('ad_rewarded_result', { placement, result: r });
   if (r === 'done') {
     Meta.markRewarded(App.save.data, adNow());
     Tasks.add(App.save.data, App.config.eco, today(), 'ad');
@@ -211,7 +224,7 @@ export function needCoins(short: number, after?: () => void, item?: AdItem): voi
   const l = text(p.body, tr('H_NEED_COINS_LINE', short), 40);
   at(l.node, 0, -40);
   // 买的是一样东西（技能等）：看广告直接领这一个，不限次数（给金币买不起，等于白看）
-  if (item && App.platform.adsAvailable()) {
+  if (item && offerAd(item.placement)) {
     const b = button(p.body, {
       color: 'yellow',
       w: 480,
@@ -229,7 +242,7 @@ export function needCoins(short: number, after?: () => void, item?: AdItem): voi
     return;
   }
   const left = Meta.freeCoinLeft(App.save.data, eco, today());
-  if (left > 0 && App.platform.adsAvailable()) {
+  if (left > 0 && offerAd('rv_free_coin')) {
     const b = button(p.body, {
       color: 'yellow',
       w: 480,
@@ -298,7 +311,7 @@ export function livesPopup(onChange?: () => void): void {
   const s = App.save.data;
   const day = today();
   const adLeft = Lives.adLeft(s, eco, day);
-  const adOn = adLeft > 0 && App.platform.adsAvailable();
+  const adOn = adLeft > 0 && offerAd('rv_life');
   // 按钮两个一行：有看广告那个是三个、两行；没有（第一版不接广告）只有一行，弹窗跟着矮一截（底下空太多）
   const rows = adOn ? 2 : 1;
   const ROW_H = 112;

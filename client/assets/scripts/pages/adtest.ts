@@ -1,6 +1,7 @@
-// 广告测试页（设置里的入口，仅调试构建可见；docs/01，调试用可朴素）：
+// 广告测试页（设置里的入口，测试模式里可见，上架包也能开；docs/01，调试用可朴素）：
 // 列出全部广告位，可单独触发；今日展示次数、插屏频控状态；可重置频控；可切换「广告可用 / 不可用」。
-import { Node } from 'cc';
+// 手机上还显示原生广告状态：SDK 启动没有、同意拿没拿到、最近一次拉广告失败的错误码。
+import { Node, UITransform } from 'cc';
 import * as Meta from '../core/meta/meta';
 import { PlatformDebug } from '../platform/platformDebug';
 import { App } from '../services/app';
@@ -56,9 +57,21 @@ export class AdTestPage extends Page {
     const can = Meta.shouldShowInterstitial(s, App.config.ads, s.level, adNow(s.ads));
     const st = text(v, `插屏：${can ? '现在会弹' : '频控中'} · 上次插屏关 ${s.ads.interstitialLevel} · 第 ${s.level} 关`, 26, { width: 680 });
     at(st.node, 0, top - 280);
+    // 原生广告状态（手机上查「为什么没有广告」：错误码 3 没填充、2 网络、1 请求不对、0 内部错误；consent = 问同意失败）
+    // 一段字、左上角对齐，长的错误说明自动折行，下面的列表按实际高度往下排
+    let statusH = 0;
+    const lines = p.adStatus();
+    if (lines.length > 0) {
+      const l = text(v, lines.join('\n'), 22, { width: 680, align: 'left', color: COLOR.yellow });
+      const t = l.node.getComponent(UITransform) as UITransform;
+      t.setAnchorPoint(0, 1);
+      l.updateRenderData(true);
+      statusH = t.height + 10;
+      at(l.node, -340, top - 310);
+    }
 
     // 广告位列表
-    const y0 = top - 330;
+    const y0 = top - 330 - statusH;
     const y1 = Screen.bottom + 20;
     const sc = new Scroller(v, Screen.W, y0 - y1);
     at(sc.node, 0, (y0 + y1) / 2);

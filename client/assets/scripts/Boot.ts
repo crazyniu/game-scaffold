@@ -197,6 +197,8 @@ export class Boot extends Component {
     if (App.flags.play) ui.go('game', { level: App.flags.level > 0 ? App.flags.level : App.save.data.level });
     else if (App.flags.page) ui.go(App.flags.page);
     else ui.go('home');
+    // 从脚本开始跑到第一页出来用了几秒：低端机加载慢会让人还没开局就走（docs/05 第 7 节）
+    App.platform.track('app_ready', { seconds: Math.round((globalThis.performance?.now() ?? 0) / 100) / 10 });
     // 首页用不到的大图和卡面：首页出来以后在后台接着读，先读局内的，再读结算、开箱用的。
     // 读不下来的用到时再读（进关前 gameView 会等局内的图）
     const later = (keys: string[]) => loadFrames(keys).catch((e: unknown) => console.warn('后台读图没读完，用到时再读', e));

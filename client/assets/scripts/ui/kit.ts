@@ -207,10 +207,20 @@ function showFrame(n: Node, path: string, w?: number, h?: number): void {
   if (f) return setFrame(n, f, w, h);
   (n.getComponent(Sprite) as Sprite).spriteFrame = null;
   size(n, w ?? h ?? 0, h ?? w ?? 0);
-  void frameAsync(path).then((sf) => {
-    if (sf && n.isValid && wanted.get(n) === seq) setFrame(n, sf, w, h);
-  });
+  const load = (wait: number): void => {
+    void frameAsync(path).then((sf) => {
+      if (!n.isValid || wanted.get(n) !== seq) return;
+      if (sf) return setFrame(n, sf, w, h);
+      // 包里有这张图但这次没读下来（微信弱网、没预读的图）：节点还在、还要显示这张图就过一会儿再试，
+      // 间隔逐次加倍、最多再试 5 次；节点销毁或换了别的图（seq 变了）就停
+      if (hasFrame(path) && wait <= IMG_RETRY_MAX) setTimeout(() => load(wait * 2), wait * 1000);
+    });
+  };
+  load(IMG_RETRY_FIRST);
 }
+
+const IMG_RETRY_FIRST = 3;
+const IMG_RETRY_MAX = 48;
 
 // ---- 特效小图的对象池（微信性能报告的建议：减少临时对象和垃圾回收）。
 // 火花、水波、彩纸、冒泡这类一闪而过、源源不断的小图，播完不销毁，收回来下次接着用。

@@ -44,6 +44,7 @@ final class GameAds {
     private static final int RETRY_MAX = 300;
     private static int rewardedRetry = RETRY_FIRST;
     private static int interstitialRetry = RETRY_FIRST;
+    private static int consentRetry = RETRY_FIRST;
     private static final Handler main = new Handler(Looper.getMainLooper());
 
     private GameAds() {}
@@ -69,28 +70,69 @@ final class GameAds {
     }
 
     static void openPrivacyOptions() {
-        // 改完同意重新判断：原来不同意、现在同意了就初始化并拉广告
-        UserMessagingPlatform.showPrivacyOptionsForm(activity, error -> startSdk(UserMessagingPlatform.getConsentInformation(activity)));
+        // 改完同意重新判断：原来不同意、现在同意了就初始化并拉广告。表单打不开（没网、这个地区不需要）回给脚本提示
+        UserMessagingPlatform.showPrivacyOptionsForm(activity, error -> {
+            send("game.privacy", error == null ? "{\"ok\":true}" : "{\"ok\":false}");
+            ConsentInformation info = UserMessagingPlatform.getConsentInformation(activity);
+            sendConsent(info);
+            startSdk(info);
+        });
+    }
+
+    /** game.consent：这个用户要不要「隐私选项」入口（UMP 说需要才给，欧洲等地） */
+    private static void sendConsent(ConsentInformation info) {
+        boolean required = info.getPrivacyOptionsRequirementStatus() == ConsentInformation.PrivacyOptionsRequirementStatus.REQUIRED;
+        send("game.consent", required ? "{\"privacy\":true}" : "{\"privacy\":false}");
     }
 
     private static void askConsentThenStart() {
         ConsentInformation info = UserMessagingPlatform.getConsentInformation(activity);
         ConsentRequestParameters params = new ConsentRequestParameters.Builder().build();
         info.requestConsentInfoUpdate(activity, params,
-            () -> UserMessagingPlatform.loadAndShowConsentFormIfRequired(activity, formError -> startSdk(info)),
-            requestError -> startSdk(info));
+            () -> UserMessagingPlatform.loadAndShowConsentFormIfRequired(activity, formError -> {
+                consentRetry = RETRY_FIRST;
+                if (formError != null) reportFail("consent_form", formError.getErrorCode(), formError.getMessage());
+                sendConsent(info);
+                startSdk(info);
+            }),
+            requestError -> {
+                reportFail("consent", requestError.getErrorCode(), requestError.getMessage());
+                sendConsent(info);
+                startSdk(info);
+                // 问同意本身失败了（第一次打开时连不上 Google 等）：同意状态停在「未知」、请求不了广告。
+                // 不再问的话这一局广告入口一直是灰的，要杀掉重开；隔一会儿再问，间隔和拉广告失败的重试一样
+                if (!info.canRequestAds()) {
+                    int wait = consentRetry;
+                    consentRetry = Math.min(RETRY_MAX, consentRetry * 2);
+                    main.postDelayed(GameAds::askConsentThenStart, wait * 1000L);
+                }
+            });
     }
 
     private static void startSdk(ConsentInformation info) {
         if (!info.canRequestAds()) {
-            // 用户没同意：这次请求不了广告，入口变灰；设置里的「隐私选项」还能改
-            send("game.ads", "{\"ready\":false}");
+            // 用户没同意：这次请求不了广告，入口变灰；设置里的「隐私选项」还能改。
+            // consent:false 让脚本那头插屏、横幅也停，之前发出的加载请求晚到的 ready 也不算（fishsort #215）
+            send("game.ads", "{\"ready\":false,\"consent\":false}");
             return;
         }
         MobileAds.initialize(activity, status -> {
+            // SDK 起来了：插屏、横幅从这时起就能请求，不用等激励视频加载好（激励一直拉不到时插屏、横幅原来也被挡着）
+            send("game.ads", "{\"ready\":false,\"started\":true}");
             loadRewarded();
             loadInterstitial();
         });
+    }
+
+    /** 拉广告失败：告诉脚本是哪种广告、错误码，脚本记一条埋点（ad_load_fail），查「为什么没有广告」用 */
+    private static void reportFail(String format, LoadAdError error) {
+        reportFail(format, error.getCode(), error.getMessage());
+    }
+
+    /** format 还有 consent（问同意失败）、consent_form（同意弹窗出错） */
+    private static void reportFail(String format, int code, String message) {
+        String msg = JSONObject.quote(message == null ? "" : message);
+        send("game.adfail", "{\"format\":\"" + format + "\",\"code\":" + code + ",\"msg\":" + msg + "}");
     }
 
     private static boolean rewardedLoading;
@@ -99,6 +141,8 @@ final class GameAds {
     private static void loadRewarded() {
         // 已经有一条或正在加载就不重复请求（点了入口、到点重试可能同时触发）
         if (rewardedUnit.isEmpty() || rewarded != null || rewardedLoading) return;
+        // 同意被收回后，排队的重试不再发请求（fishsort #215）
+        if (!UserMessagingPlatform.getConsentInformation(activity).canRequestAds()) return;
         rewardedLoading = true;
         RewardedAd.load(activity, rewardedUnit, new AdRequest.Builder().build(), new RewardedAdLoadCallback() {
             @Override
@@ -131,6 +175,7 @@ final class GameAds {
                 rewardedLoading = false;
                 rewarded = null;
                 send("game.ads", "{\"ready\":false}");
+                reportFail("rewarded", error);
                 int wait = rewardedRetry;
                 rewardedRetry = Math.min(RETRY_MAX, rewardedRetry * 2);
                 main.postDelayed(GameAds::loadRewarded, wait * 1000L);
@@ -140,6 +185,7 @@ final class GameAds {
 
     private static void loadInterstitial() {
         if (interstitialUnit.isEmpty() || interstitial != null || interstitialLoading) return;
+        if (!UserMessagingPlatform.getConsentInformation(activity).canRequestAds()) return;
         interstitialLoading = true;
         InterstitialAd.load(activity, interstitialUnit, new AdRequest.Builder().build(), new InterstitialAdLoadCallback() {
             @Override
@@ -168,6 +214,7 @@ final class GameAds {
             public void onAdFailedToLoad(@NonNull LoadAdError error) {
                 interstitialLoading = false;
                 interstitial = null;
+                reportFail("interstitial", error);
                 int wait = interstitialRetry;
                 interstitialRetry = Math.min(RETRY_MAX, interstitialRetry * 2);
                 main.postDelayed(GameAds::loadInterstitial, wait * 1000L);

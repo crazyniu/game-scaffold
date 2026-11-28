@@ -14,7 +14,7 @@ import { now, today } from '../services/clock';
 import * as fx from '../ui/fx';
 import { tr } from '../ui/i18n';
 import { at, box, button, COLOR, fmt, img, lazyImg, opacity, setImg, slice, text, twoLines } from '../ui/kit';
-import { PrizeItem, cardItem, needCoins, revealCards, rewardPopup, skillIcon, skillName, watchAd } from '../ui/popups';
+import { PrizeItem, cardItem, needCoins, offerAd, revealCards, rewardPopup, skillIcon, skillName, watchAd } from '../ui/popups';
 import { Screen } from '../ui/screen';
 import { Page, headBottom, pageHead, ui } from '../ui/shell';
 
@@ -147,7 +147,7 @@ export class WheelPage extends Page {
     twoLines(ten, tr('H_TEN_PULL'), `${fmt(eco.wheel.tenCost)}`, 'icon/coin');
     row.push(ten.node);
     // 看广告 +1：拉不到广告时不出现，剩下的居中排
-    if (App.platform.hasCapability('ads') && App.platform.adsAvailable()) {
+    if (offerAd('rv_wheel')) {
       const adLeft = Wheel.adLeft(s, eco, day);
       const ad = button(v, {
         color: 'yellow',

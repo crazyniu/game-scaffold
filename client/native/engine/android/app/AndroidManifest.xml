@@ -49,6 +49,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- AdMob 的全屏广告页：SDK 自带的主题（Theme.Translucent）没让画面铺进刘海，而游戏铺进去了（values-v28 的 GameGameTheme），
+             刘海屏上广告从刘海下面才开始画，顶上那条透明、露出后面的游戏。换成多了 shortEdges 的同款主题（res/values*/styles.xml 的 GameAdTheme）。
+             game.json 关了广告时 apply.mjs 改成 tools:node="remove"（那时没有广告 SDK，也就没有这个类） -->
+        <activity
+            android:name="com.google.android.gms.ads.AdActivity"
+            android:theme="@style/GameAdTheme"
+            tools:replace="android:theme"/>
         <activity
             android:name="com.cocos.lib.CocosEditBoxActivity"
             android:configChanges="orientation|keyboardHidden|screenSize|screenLayout|smallestScreenSize"
